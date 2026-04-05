@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { ChevronLeft, MapPin, Globe, ExternalLink } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ChevronLeft, MapPin, Globe, ExternalLink, Search } from 'lucide-react'
 import { createPlace, createReview } from '../lib/places'
 import { getGroupById } from '../lib/groups'
 import { StarRating } from '../components/StarRating'
@@ -14,6 +14,15 @@ const CATEGORIES: { value: Category; label: string; emoji: string }[] = [
   { value: 'coffee', label: 'Coffee', emoji: '☕' },
   { value: 'other', label: 'Other', emoji: '📍' },
 ]
+
+interface NominatimResult {
+  place_id: number
+  display_name: string
+  name: string
+  lat: string
+  lon: string
+  address?: { road?: string; city?: string; country?: string }
+}
 
 export function AddPlacePage() {
   const { groupId } = useParams<{ groupId: string }>()
@@ -41,6 +50,52 @@ export function AddPlacePage() {
   const [reviewText, setReviewText] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState<NominatimResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  function handleNameChange(value: string) {
+    setName(value)
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    if (value.length < 2) { setSuggestions([]); setShowSuggestions(false); return }
+    setSearching(true)
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value)}&format=json&limit=5&addressdetails=1`,
+          { headers: { 'Accept-Language': 'en' } }
+        )
+        const data: NominatimResult[] = await res.json()
+        setSuggestions(data)
+        setShowSuggestions(data.length > 0)
+      } catch {}
+      setSearching(false)
+    }, 400)
+  }
+
+  function selectSuggestion(item: NominatimResult) {
+    const placeName = item.name || item.display_name.split(',')[0]
+    setName(placeName)
+    // Build a precise maps search from the full display name
+    setMapsSearch(item.display_name)
+    setSuggestions([])
+    setShowSuggestions(false)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
@@ -50,7 +105,9 @@ export function AddPlacePage() {
         name,
         category,
         cuisine: cuisine || undefined,
-        google_maps_url: mapsSearch ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsSearch)}` : undefined,
+        google_maps_url: mapsSearch
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsSearch)}`
+          : undefined,
         instagram_url: instagram || undefined,
         wolt_url: wolt || undefined,
         tabit_url: tabit || undefined,
@@ -88,17 +145,55 @@ export function AddPlacePage() {
       </div>
 
       <form onSubmit={handleSubmit} className="px-5 flex flex-col gap-5">
-        {/* Name */}
-        <div>
+        {/* Name with autocomplete */}
+        <div ref={wrapperRef} className="relative">
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Place name</label>
-          <input
-            type="text"
-            placeholder="e.g. The Alchemist"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-white placeholder:text-gray-300"
-          />
+          <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
+            <Search size={15} className="text-gray-300 shrink-0" />
+            <input
+              type="text"
+              placeholder="e.g. The Alchemist Tel Aviv"
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              required
+              className="flex-1 px-3 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
+            />
+            {searching && (
+              <div className="w-3.5 h-3.5 rounded-full border-2 border-violet-200 border-t-violet-500 animate-spin shrink-0" />
+            )}
+          </div>
+
+          {/* Suggestions dropdown */}
+          <AnimatePresence>
+            {showSuggestions && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-100 rounded-2xl shadow-lg z-50 overflow-hidden"
+              >
+                {suggestions.map((item) => {
+                  const placeName = item.name || item.display_name.split(',')[0]
+                  const subtitle = item.display_name.split(',').slice(1, 3).join(',').trim()
+                  return (
+                    <button
+                      key={item.place_id}
+                      type="button"
+                      onClick={() => selectSuggestion(item)}
+                      className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                    >
+                      <MapPin size={14} className="text-violet-400 mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{placeName}</p>
+                        <p className="text-xs text-gray-400 truncate">{subtitle}</p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Category */}
@@ -138,11 +233,11 @@ export function AddPlacePage() {
         <div>
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Links</label>
           <div className="flex flex-col gap-2.5">
-            <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-3">
+            <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
               <MapPin size={15} className="text-blue-400 shrink-0" />
               <input
                 type="text"
-                placeholder='Search on Google Maps (e.g. "Café Ravel Tel Aviv")'
+                placeholder="Google Maps location (auto-filled from name)"
                 value={mapsSearch}
                 onChange={(e) => setMapsSearch(e.target.value)}
                 className="flex-1 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
