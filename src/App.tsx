@@ -15,9 +15,7 @@ import { BottomNav } from './components/BottomNav'
 
 function AppRoutes() {
   const { session } = useAuthStore()
-
   if (!session) return <OnboardingPage />
-
   return (
     <>
       <Routes>
@@ -34,6 +32,28 @@ function AppRoutes() {
   )
 }
 
+async function loadUserProfile(userId: string, email: string, nickname?: string) {
+  try {
+    return await getProfile(userId)
+  } catch {
+    // Profile might not exist yet (trigger delay) — create it manually
+    const { data } = await supabase
+      .from('users')
+      .upsert({ id: userId, email, nickname: nickname ?? email.split('@')[0] }, { onConflict: 'id' })
+      .select()
+      .single()
+    return data
+  }
+}
+
+async function processPendingInvite(userId: string) {
+  const pendingInvite = sessionStorage.getItem('pendingInvite')
+  if (pendingInvite) {
+    sessionStorage.removeItem('pendingInvite')
+    try { await joinGroupByCode(pendingInvite, userId) } catch {}
+  }
+}
+
 export default function App() {
   const { setUser, setSession } = useAuthStore()
   const [loading, setLoading] = useState(true)
@@ -42,27 +62,29 @@ export default function App() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session)
       if (session?.user) {
-        try {
-          const profile = await getProfile(session.user.id)
-          setUser(profile)
-
-          const pendingInvite = sessionStorage.getItem('pendingInvite')
-          if (pendingInvite) {
-            sessionStorage.removeItem('pendingInvite')
-            await joinGroupByCode(pendingInvite, session.user.id)
-          }
-        } catch {}
+        const profile = await loadUserProfile(
+          session.user.id,
+          session.user.email ?? '',
+          session.user.user_metadata?.nickname
+        )
+        setUser(profile)
+        await processPendingInvite(session.user.id)
       }
       setLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session)
       if (session?.user) {
-        try {
-          const profile = await getProfile(session.user.id)
-          setUser(profile)
-        } catch {}
+        const profile = await loadUserProfile(
+          session.user.id,
+          session.user.email ?? '',
+          session.user.user_metadata?.nickname
+        )
+        setUser(profile)
+        if (event === 'SIGNED_IN') {
+          await processPendingInvite(session.user.id)
+        }
       } else {
         setUser(null)
       }
