@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Link, X, Copy, Check, Settings } from 'lucide-react'
+import { Plus, Link, X, Copy, Check, Settings, Trash2 } from 'lucide-react'
 
 function DancingDots() {
   return (
@@ -18,7 +18,7 @@ function DancingDots() {
   )
 }
 import { useAuthStore } from '../store/useAuthStore'
-import { getUserGroups, createGroup, joinGroupByCode, updateGroup } from '../lib/groups'
+import { getUserGroups, createGroup, joinGroupByCode, updateGroup, deleteGroup } from '../lib/groups'
 import type { Group, GroupType } from '../types'
 
 const GROUP_TYPES: { value: GroupType; label: string; emoji: string }[] = [
@@ -46,6 +46,8 @@ export function GroupsPage() {
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (user) load()
@@ -116,6 +118,19 @@ export function GroupsPage() {
     }
   }
 
+  async function handleDeleteGroup(groupId: string) {
+    setDeleting(true)
+    try {
+      await deleteGroup(groupId)
+      setConfirmDeleteId(null)
+      load()
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   function copyInvite(group: Group) {
     const url = `${window.location.origin}/join/${group.invite_code}`
     navigator.clipboard.writeText(url)
@@ -171,6 +186,31 @@ export function GroupsPage() {
                   </div>
                 </div>
 
+                <AnimatePresence>
+                  {confirmDeleteId === group.id && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden mt-2"
+                    >
+                      <div className="bg-red-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
+                        <p className="text-xs text-red-500 font-medium">Delete this group and all its places?</p>
+                        <div className="flex gap-2 shrink-0">
+                          <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null) }} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1">Cancel</button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id) }}
+                            disabled={deleting}
+                            className="text-xs bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                          >
+                            {deleting ? '...' : 'Delete'}
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between">
                   <button
                     onClick={() => copyInvite(group)}
@@ -183,12 +223,20 @@ export function GroupsPage() {
                     )}
                   </button>
                   {group.created_by === user?.id && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openEditGroup(group) }}
-                      className="flex items-center gap-1 text-xs text-gray-300 hover:text-violet-500 transition-colors"
-                    >
-                      <Settings size={13} /> Edit
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openEditGroup(group) }}
+                        className="flex items-center gap-1 text-xs text-gray-300 hover:text-violet-500 transition-colors"
+                      >
+                        <Settings size={13} /> Edit
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(group.id) }}
+                        className="flex items-center gap-1 text-xs text-gray-300 hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
                   )}
                 </div>
               </motion.div>

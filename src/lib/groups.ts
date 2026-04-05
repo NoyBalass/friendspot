@@ -72,6 +72,13 @@ export async function updateGroup(groupId: string, payload: { name?: string; des
   return data
 }
 
+export async function deleteGroup(groupId: string) {
+  const { error } = await supabase.from('groups').delete().eq('id', groupId)
+  if (error) throw error
+  cacheInvalidate(`group:${groupId}`)
+  cacheInvalidate(`groups:`)
+}
+
 export async function getGroupByInviteCode(code: string) {
   const { data, error } = await supabase
     .from('groups').select('*').eq('invite_code', code.toUpperCase()).single()

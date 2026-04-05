@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LogOut, Pencil, X, Plus, ChevronRight, Star, MapPin, Check } from 'lucide-react'
+import { LogOut, Pencil, X, Plus, ChevronRight, Star, MapPin, Check, Settings, Trash2 } from 'lucide-react'
 import { useAuthStore } from '../store/useAuthStore'
 import { signOut } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import { getUserGroups, createGroup } from '../lib/groups'
+import { getUserGroups, createGroup, updateGroup, deleteGroup } from '../lib/groups'
 import { Avatar } from '../components/Avatar'
 import { CategoryBadge } from '../components/CategoryBadge'
 import type { Group, GroupType } from '../types'
@@ -54,6 +54,17 @@ export function ProfilePage() {
   const [groupDesc, setGroupDesc] = useState('')
   const [groupType, setGroupType] = useState<GroupType>('all')
   const [groupSaving, setGroupSaving] = useState(false)
+
+  // edit group
+  const [editingGroup, setEditingGroup] = useState<Group | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [editType, setEditType] = useState<GroupType>('all')
+  const [editSaving, setEditSaving] = useState(false)
+
+  // delete group
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -139,6 +150,41 @@ export function ProfilePage() {
     }
   }
 
+  function openEditGroup(g: Group) {
+    setEditingGroup(g)
+    setEditName(g.name)
+    setEditDesc(g.description ?? '')
+    setEditType((g.type ?? 'all') as GroupType)
+  }
+
+  async function saveEditGroup(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingGroup) return
+    setEditSaving(true)
+    try {
+      await updateGroup(editingGroup.id, { name: editName, description: editDesc, type: editType })
+      setEditingGroup(null)
+      loadGroups()
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  async function handleDeleteGroup(groupId: string) {
+    setDeleting(true)
+    try {
+      await deleteGroup(groupId)
+      setConfirmDeleteId(null)
+      loadGroups()
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (!user) return null
 
   return (
@@ -220,18 +266,55 @@ export function ProfilePage() {
           ) : (
             <div className="divide-y divide-gray-50">
               {groups.map((g) => (
-                <button
-                  key={g.id}
-                  onClick={() => navigate(`/group/${g.id}`)}
-                  className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-left"
-                >
-                  <span className="text-lg">{GROUP_TYPES.find(t => t.value === g.type)?.emoji ?? '✨'}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{g.name}</p>
-                    <p className="text-xs text-gray-400">{GROUP_TYPES.find(t => t.value === g.type)?.label ?? 'Mixed'}</p>
+                <div key={g.id}>
+                  <div
+                    onClick={() => navigate(`/group/${g.id}`)}
+                    className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    <span className="text-lg">{GROUP_TYPES.find(t => t.value === g.type)?.emoji ?? '✨'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{g.name}</p>
+                      <p className="text-xs text-gray-400">{GROUP_TYPES.find(t => t.value === g.type)?.label ?? 'Mixed'}</p>
+                    </div>
+                    {g.created_by === user.id ? (
+                      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => openEditGroup(g)} className="text-gray-300 hover:text-violet-500 transition-colors">
+                          <Settings size={14} />
+                        </button>
+                        <button onClick={() => setConfirmDeleteId(g.id)} className="text-gray-300 hover:text-red-400 transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <ChevronRight size={14} className="text-gray-300 shrink-0" />
+                    )}
                   </div>
-                  <ChevronRight size={14} className="text-gray-300 shrink-0" />
-                </button>
+
+                  <AnimatePresence>
+                    {confirmDeleteId === g.id && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden px-4 pb-2"
+                      >
+                        <div className="bg-red-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
+                          <p className="text-xs text-red-500 font-medium">Delete this group?</p>
+                          <div className="flex gap-2 shrink-0">
+                            <button onClick={() => setConfirmDeleteId(null)} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1">Cancel</button>
+                            <button
+                              onClick={() => handleDeleteGroup(g.id)}
+                              disabled={deleting}
+                              className="text-xs bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 disabled:opacity-50"
+                            >
+                              {deleting ? '...' : 'Delete'}
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               ))}
             </div>
           )}
@@ -388,6 +471,76 @@ export function ProfilePage() {
                   className="py-3 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 active:scale-95 transition-all disabled:opacity-50"
                 >
                   {groupSaving ? <DancingDots /> : 'Create'}
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit group modal */}
+      <AnimatePresence>
+        {editingGroup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center px-5"
+            onClick={() => setEditingGroup(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ type: 'spring', damping: 30, stiffness: 400 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-xl"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-lg font-semibold text-gray-900">Edit group</h2>
+                <button onClick={() => setEditingGroup(null)} className="text-gray-400"><X size={20} /></button>
+              </div>
+              <form onSubmit={saveEditGroup} className="flex flex-col gap-4">
+                <input
+                  type="text"
+                  placeholder="Group name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300"
+                />
+                <input
+                  type="text"
+                  placeholder="Description (optional)"
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300"
+                />
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Group type</p>
+                  <div className="flex flex-wrap gap-2">
+                    {GROUP_TYPES.map((t) => (
+                      <button
+                        key={t.value}
+                        type="button"
+                        onClick={() => setEditType(t.value)}
+                        className={`px-3 py-1.5 rounded-xl text-sm border transition-all ${
+                          editType === t.value
+                            ? 'bg-violet-500 text-white border-violet-500'
+                            : 'bg-white text-gray-500 border-gray-200'
+                        }`}
+                      >
+                        {t.emoji} {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="py-3 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {editSaving ? <DancingDots /> : 'Save changes'}
                 </button>
               </form>
             </motion.div>
