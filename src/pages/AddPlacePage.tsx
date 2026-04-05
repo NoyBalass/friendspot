@@ -35,7 +35,7 @@ async function getPlacePredictions(input: string, isHebrew: boolean): Promise<Su
       languageCode: isHebrew ? 'he' : 'en',
       includedRegionCodes: ['il'],
       locationBias: {
-        circle: { center: { latitude: 31.5, longitude: 34.85 }, radius: 150000 },
+        circle: { center: { latitude: 31.5, longitude: 34.85 }, radius: 50000 },
       },
     }),
   })
