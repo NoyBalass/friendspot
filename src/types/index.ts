@@ -47,6 +47,7 @@ export interface Place {
   review_count?: number
   cover_photo?: string
   added_by_user?: User
+  review_users?: User[]
 }
 
 export interface Review {

@@ -24,7 +24,7 @@ async function fetchAndCachePlaces(key: string, groupId: string, category?: Cate
     .select(`
       *,
       added_by_user:users!places_added_by_fkey ( id, nickname, avatar_url ),
-      reviews ( rating, photos:review_photos ( photo_url ) )
+      reviews ( rating, user_id, user:users ( id, nickname, avatar_url ), photos:review_photos ( photo_url ) )
     `)
     .eq('group_id', groupId)
     .order('created_at', { ascending: false })
@@ -43,6 +43,11 @@ async function fetchAndCachePlaces(key: string, groupId: string, category?: Cate
         : null,
       review_count: p.reviews?.length ?? 0,
       cover_photo: p.cover_photo ?? firstPhoto?.photo_url ?? null,
+      review_users: (p.reviews ?? [])
+        .map((r: any) => r.user)
+        .filter((u: any) => u != null)
+        .filter((u: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === u.id) === i)
+        .slice(0, 4),
     }
   })
 

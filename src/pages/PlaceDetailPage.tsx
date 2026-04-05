@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, MapPin, Globe, ExternalLink, Plus, Pencil, X, Camera, Settings, ImagePlus } from 'lucide-react'
+import { ChevronLeft, MapPin, Globe, ExternalLink, Phone, Plus, Pencil, X, Camera, Settings, ImagePlus } from 'lucide-react'
 import { getPlaceById, getPlaceReviews, upsertReview, uploadReviewPhoto, getUserReviewForPlace, updatePlace, uploadPlaceCoverPhoto } from '../lib/places'
 import { StarRating } from '../components/StarRating'
 import { ReviewCard } from '../components/ReviewCard'
@@ -38,13 +38,11 @@ export function PlaceDetailPage() {
   const [editName, setEditName] = useState('')
   const [editCuisine, setEditCuisine] = useState('')
   const [editMaps, setEditMaps] = useState('')
-  const [editInstagram, setEditInstagram] = useState('')
-  const [editWolt, setEditWolt] = useState('')
-  const [editTabit, setEditTabit] = useState('')
-  const [editWebsite, setEditWebsite] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editCoverFile, setEditCoverFile] = useState<File | null>(null)
   const [editCoverPreview, setEditCoverPreview] = useState<string | null>(null)
+  // Google Places auto-fetched links
+  const [googleLinks, setGoogleLinks] = useState<{ website?: string; instagram?: string; phone?: string } | null>(null)
 
   useEffect(() => {
     if (placeId && user) load()
@@ -65,6 +63,7 @@ export function PlaceDetailPage() {
         setRating(existing.rating ?? 0)
         setText(existing.text ?? '')
       }
+      if (p?.google_maps_url) fetchGoogleLinks(p.google_maps_url)
     } finally {
       setLoading(false)
     }
@@ -76,17 +75,12 @@ export function PlaceDetailPage() {
 
   function openEditSheet() {
     if (!place) return
-    // extract original search query from google maps url
     const mapsQ = place.google_maps_url
       ? (() => { try { return new URL(place.google_maps_url!).searchParams.get('query') ?? '' } catch { return place.google_maps_url ?? '' } })()
       : ''
     setEditName(place.name)
     setEditCuisine(place.cuisine ?? '')
     setEditMaps(mapsQ)
-    setEditInstagram(place.instagram_url ?? '')
-    setEditWolt(place.wolt_url ?? '')
-    setEditTabit(place.tabit_url ?? '')
-    setEditWebsite(place.website_url ?? '')
     setEditCoverFile(null)
     setEditCoverPreview(place.cover_photo ?? null)
     setShowEdit(true)
@@ -103,10 +97,6 @@ export function PlaceDetailPage() {
         name: editName,
         cuisine: editCuisine || undefined,
         google_maps_url: editMaps ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(editMaps)}` : undefined,
-        instagram_url: editInstagram || undefined,
-        wolt_url: editWolt || undefined,
-        tabit_url: editTabit || undefined,
-        website_url: editWebsite || undefined,
       })
       setShowEdit(false)
       load()
@@ -115,6 +105,34 @@ export function PlaceDetailPage() {
     } finally {
       setEditSaving(false)
     }
+  }
+
+  async function fetchGoogleLinks(mapsUrl: string) {
+    const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY
+    if (!apiKey) return
+    try {
+      const query = new URL(mapsUrl).searchParams.get('query')
+      if (!query) return
+      const searchRes = await fetch(
+        `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(query)}&inputtype=textquery&fields=place_id&key=${apiKey}`
+      )
+      const searchData = await searchRes.json()
+      const placeId = searchData.candidates?.[0]?.place_id
+      if (!placeId) return
+      const detailRes = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=website,formatted_phone_number&key=${apiKey}`
+      )
+      const detailData = await detailRes.json()
+      const result = detailData.result ?? {}
+      const website = result.website as string | undefined
+      const phone = result.formatted_phone_number as string | undefined
+      const instagram = website?.includes('instagram.com') ? website : undefined
+      setGoogleLinks({
+        website: instagram ? undefined : website,
+        instagram,
+        phone,
+      })
+    } catch {}
   }
 
   function handleCoverFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -245,28 +263,22 @@ export function PlaceDetailPage() {
                 <MapPin size={12} /> Maps
               </a>
             )}
-            {place.instagram_url && (
-              <a href={place.instagram_url} target="_blank" rel="noopener noreferrer"
+            {googleLinks?.website && (
+              <a href={googleLinks.website} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-gray-50 text-gray-600 font-medium">
+                <Globe size={12} /> Website
+              </a>
+            )}
+            {googleLinks?.instagram && (
+              <a href={googleLinks.instagram} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-pink-50 text-pink-600 font-medium">
                 <ExternalLink size={12} /> Instagram
               </a>
             )}
-            {place.wolt_url && (
-              <a href={place.wolt_url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-sky-50 text-sky-600 font-medium">
-                <ExternalLink size={12} /> Wolt
-              </a>
-            )}
-            {place.tabit_url && (
-              <a href={place.tabit_url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-orange-50 text-orange-600 font-medium">
-                <ExternalLink size={12} /> Tabit
-              </a>
-            )}
-            {place.website_url && (
-              <a href={place.website_url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-gray-50 text-gray-600 font-medium">
-                <Globe size={12} /> Website
+            {googleLinks?.phone && (
+              <a href={`tel:${googleLinks.phone}`}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 font-medium">
+                <Phone size={12} /> {googleLinks.phone}
               </a>
             )}
           </div>
@@ -364,25 +376,16 @@ export function PlaceDetailPage() {
                   onChange={(e) => setEditCuisine(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300"
                 />
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide -mb-2">Links</p>
-                {[
-                  { icon: MapPin, placeholder: 'Google Maps search', value: editMaps, set: setEditMaps, type: 'text', color: 'text-blue-400' },
-                  { icon: ExternalLink, placeholder: 'Instagram URL', value: editInstagram, set: setEditInstagram, type: 'url', color: 'text-pink-400' },
-                  { icon: ExternalLink, placeholder: 'Wolt URL', value: editWolt, set: setEditWolt, type: 'url', color: 'text-sky-400' },
-                  { icon: ExternalLink, placeholder: 'Tabit URL', value: editTabit, set: setEditTabit, type: 'url', color: 'text-orange-400' },
-                  { icon: Globe, placeholder: 'Website', value: editWebsite, set: setEditWebsite, type: 'url', color: 'text-gray-400' },
-                ].map(({ icon: Icon, placeholder, value, set, type, color }) => (
-                  <div key={placeholder} className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-3">
-                    <Icon size={15} className={color} />
-                    <input
-                      type={type}
-                      placeholder={placeholder}
-                      value={value}
-                      onChange={(e) => set(e.target.value)}
-                      className="flex-1 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
-                    />
-                  </div>
-                ))}
+                <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-3">
+                  <MapPin size={15} className="text-blue-400 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Google Maps search"
+                    value={editMaps}
+                    onChange={(e) => setEditMaps(e.target.value)}
+                    className="flex-1 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={editSaving}

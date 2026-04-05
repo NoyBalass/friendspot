@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, MapPin, Globe, ExternalLink, Search, ImagePlus } from 'lucide-react'
+import { ChevronLeft, MapPin, Search, ImagePlus } from 'lucide-react'
 import { createPlace, createReview, uploadPlaceCoverPhoto } from '../lib/places'
 import { getGroupById } from '../lib/groups'
 import { StarRating } from '../components/StarRating'
@@ -52,10 +52,6 @@ export function AddPlacePage() {
   const [category, setCategory] = useState<Category>('restaurant')
   const [cuisine, setCuisine] = useState('')
   const [mapsSearch, setMapsSearch] = useState('')
-  const [instagram, setInstagram] = useState('')
-  const [wolt, setWolt] = useState('')
-  const [tabit, setTabit] = useState('')
-  const [website, setWebsite] = useState('')
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [rating, setRating] = useState(0)
@@ -88,10 +84,10 @@ export function AddPlacePage() {
     searchTimer.current = setTimeout(async () => {
       try {
         const isHebrew = /[\u0590-\u05FF]/.test(value)
-        // Photon: OSM-powered POI search, biased to Israel (lon=34.85, lat=31.5)
         const lang = isHebrew ? 'he' : 'en'
+        // Israel bbox: west=34.2, south=29.5, east=35.9, north=33.4 — center bias lon=34.85 lat=31.5
         const res = await fetch(
-          `https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=6&lang=${lang}&lon=34.85&lat=31.5`
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=6&lang=${lang}&lon=34.85&lat=31.5&bbox=34.2,29.5,35.9,33.4`
         )
         const json = await res.json()
         const features: PhotonFeature[] = json.features ?? []
@@ -125,10 +121,6 @@ export function AddPlacePage() {
         google_maps_url: mapsSearch
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsSearch)}`
           : undefined,
-        instagram_url: instagram || undefined,
-        wolt_url: wolt || undefined,
-        tabit_url: tabit || undefined,
-        website_url: website || undefined,
         added_by: user!.id,
       })
 
@@ -253,37 +245,18 @@ export function AddPlacePage() {
           />
         </div>
 
-        {/* Links */}
+        {/* Google Maps location */}
         <div>
-          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Links</label>
-          <div className="flex flex-col gap-2.5">
-            <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
-              <MapPin size={15} className="text-blue-400 shrink-0" />
-              <input
-                type="text"
-                placeholder="Google Maps location (auto-filled from name)"
-                value={mapsSearch}
-                onChange={(e) => setMapsSearch(e.target.value)}
-                className="flex-1 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
-              />
-            </div>
-            {[
-              { icon: ExternalLink, placeholder: 'Instagram profile URL', value: instagram, set: setInstagram, color: 'text-pink-400' },
-              { icon: ExternalLink, placeholder: 'Wolt URL', value: wolt, set: setWolt, color: 'text-sky-400' },
-              { icon: ExternalLink, placeholder: 'Tabit URL', value: tabit, set: setTabit, color: 'text-orange-400' },
-              { icon: Globe, placeholder: 'Website', value: website, set: setWebsite, color: 'text-gray-400' },
-            ].map(({ icon: Icon, placeholder, value, set, color }) => (
-              <div key={placeholder} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-3">
-                <Icon size={15} className={color} />
-                <input
-                  type="url"
-                  placeholder={placeholder}
-                  value={value}
-                  onChange={(e) => set(e.target.value)}
-                  className="flex-1 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
-                />
-              </div>
-            ))}
+          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Location</label>
+          <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
+            <MapPin size={15} className="text-blue-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="Google Maps location (auto-filled from name)"
+              value={mapsSearch}
+              onChange={(e) => setMapsSearch(e.target.value)}
+              className="flex-1 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
+            />
           </div>
         </div>
 

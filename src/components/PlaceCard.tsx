@@ -64,6 +64,20 @@ export function PlaceCard({ place, groupId, currentUserId, onDeleted }: Props) {
             <Trash2 size={13} />
           </button>
         )}
+        {/* Reviewer avatars */}
+        {place.review_users && place.review_users.length > 0 && (
+          <div className="absolute bottom-2 right-2 flex items-center">
+            {place.review_users.map((u, i) => (
+              <div
+                key={u.id}
+                className="rounded-full border-2 border-white shadow-sm"
+                style={{ marginLeft: i === 0 ? 0 : -8, zIndex: place.review_users!.length - i }}
+              >
+                <Avatar nickname={u.nickname} src={u.avatar_url} size={24} />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Confirm delete */}
