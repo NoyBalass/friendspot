@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, MapPin, Search, ImagePlus } from 'lucide-react'
+import { ChevronLeft, MapPin, Search, ImagePlus, X, Check } from 'lucide-react'
 import { createPlace, createReview, uploadPlaceCoverPhoto } from '../lib/places'
 import { getGroupById } from '../lib/groups'
 import { StarRating } from '../components/StarRating'
@@ -15,18 +15,12 @@ const CATEGORIES: { value: Category; label: string; emoji: string }[] = [
   { value: 'other', label: 'Other', emoji: '📍' },
 ]
 
-interface PhotonFeature {
-  type: 'Feature'
-  geometry: { type: 'Point'; coordinates: [number, number] }
-  properties: {
-    osm_id: number
-    name?: string
-    street?: string
-    city?: string
-    country?: string
-    state?: string
-    type?: string
-  }
+const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY as string
+
+interface Suggestion {
+  placeId: string
+  mainText: string
+  secondaryText: string
 }
 
 export function AddPlacePage() {
@@ -51,21 +45,21 @@ export function AddPlacePage() {
   const [name, setName] = useState('')
   const [category, setCategory] = useState<Category>('restaurant')
   const [cuisine, setCuisine] = useState('')
-  const [mapsSearch, setMapsSearch] = useState('')
+  const [mapsUrl, setMapsUrl] = useState('')          // final google maps URL stored in DB
+  const [linkedPlaceId, setLinkedPlaceId] = useState('')  // google place_id when confirmed
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [rating, setRating] = useState(0)
   const [reviewText, setReviewText] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Autocomplete state
-  const [suggestions, setSuggestions] = useState<PhotonFeature[]>([])
+  // Autocomplete
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [searching, setSearching] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
@@ -78,35 +72,57 @@ export function AddPlacePage() {
 
   function handleNameChange(value: string) {
     setName(value)
+    setLinkedPlaceId('')   // user is editing manually — unlink
+    setMapsUrl('')
     if (searchTimer.current) clearTimeout(searchTimer.current)
     if (value.length < 2) { setSuggestions([]); setShowSuggestions(false); return }
+    if (!GOOGLE_API_KEY) return   // no key — skip
     setSearching(true)
     searchTimer.current = setTimeout(async () => {
       try {
         const isHebrew = /[\u0590-\u05FF]/.test(value)
-        const lang = isHebrew ? 'he' : 'en'
-        // Israel bbox: west=34.2, south=29.5, east=35.9, north=33.4 — center bias lon=34.85 lat=31.5
-        const res = await fetch(
-          `https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=6&lang=${lang}&lon=34.85&lat=31.5&bbox=34.2,29.5,35.9,33.4`
-        )
-        const json = await res.json()
-        const features: PhotonFeature[] = json.features ?? []
-        setSuggestions(features)
-        setShowSuggestions(features.length > 0)
+        const res = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': GOOGLE_API_KEY },
+          body: JSON.stringify({
+            input: value,
+            languageCode: isHebrew ? 'he' : 'en',
+            // bias strongly toward Israel
+            locationBias: {
+              circle: {
+                center: { latitude: 31.5, longitude: 34.85 },
+                radius: 150000,
+              },
+            },
+          }),
+        })
+        const data = await res.json()
+        const items: Suggestion[] = (data.suggestions ?? [])
+          .filter((s: any) => s.placePrediction)
+          .map((s: any) => ({
+            placeId: s.placePrediction.placeId,
+            mainText: s.placePrediction.structuredFormat?.mainText?.text ?? s.placePrediction.text?.text ?? '',
+            secondaryText: s.placePrediction.structuredFormat?.secondaryText?.text ?? '',
+          }))
+        setSuggestions(items)
+        setShowSuggestions(items.length > 0)
       } catch {}
       setSearching(false)
-    }, 400)
+    }, 350)
   }
 
-  function selectSuggestion(item: PhotonFeature) {
-    const p = item.properties
-    const placeName = p.name ?? ''
-    const parts = [p.street, p.city, p.country].filter(Boolean).join(', ')
-    const mapsQuery = placeName ? `${placeName}${parts ? ', ' + parts : ''}` : parts
-    setName(placeName || parts)
-    setMapsSearch(mapsQuery)
+  async function selectSuggestion(item: Suggestion) {
     setSuggestions([])
     setShowSuggestions(false)
+    setName(item.mainText)
+    setLinkedPlaceId(item.placeId)
+    // Build a place_id-based Google Maps URL (opens the exact place)
+    setMapsUrl(`https://www.google.com/maps/place/?q=place_id:${item.placeId}`)
+  }
+
+  function clearLink() {
+    setLinkedPlaceId('')
+    setMapsUrl('')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -118,9 +134,7 @@ export function AddPlacePage() {
         name,
         category,
         cuisine: cuisine || undefined,
-        google_maps_url: mapsSearch
-          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsSearch)}`
-          : undefined,
+        google_maps_url: mapsUrl || undefined,
         added_by: user!.id,
       })
 
@@ -158,14 +172,14 @@ export function AddPlacePage() {
       </div>
 
       <form onSubmit={handleSubmit} className="px-5 flex flex-col gap-5">
-        {/* Name with autocomplete */}
+        {/* Name with Google Places autocomplete */}
         <div ref={wrapperRef} className="relative">
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Place name</label>
           <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
             <Search size={15} className="text-gray-300 shrink-0" />
             <input
               type="text"
-              placeholder="e.g. The Alchemist Tel Aviv"
+              placeholder="Search on Google Maps…"
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
               onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
@@ -177,6 +191,24 @@ export function AddPlacePage() {
             )}
           </div>
 
+          {/* Confirmed place badge */}
+          <AnimatePresence>
+            {linkedPlaceId && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-600 font-medium"
+              >
+                <Check size={12} className="shrink-0" />
+                <span>Linked to Google Maps</span>
+                <button type="button" onClick={clearLink} className="ml-auto text-gray-300 hover:text-gray-500">
+                  <X size={12} />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Suggestions dropdown */}
           <AnimatePresence>
             {showSuggestions && (
@@ -186,25 +218,20 @@ export function AddPlacePage() {
                 exit={{ opacity: 0, y: -4 }}
                 className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-100 rounded-2xl shadow-lg z-50 overflow-hidden"
               >
-                {suggestions.map((item, i) => {
-                  const p = item.properties
-                  const placeName = p.name
-                  const subtitle = [p.street, p.city, p.country].filter(Boolean).join(', ')
-                  return (
-                    <button
-                      key={`${p.osm_id}-${i}`}
-                      type="button"
-                      onClick={() => selectSuggestion(item)}
-                      className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
-                    >
-                      <MapPin size={14} className="text-violet-400 mt-0.5 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{placeName || subtitle}</p>
-                        {placeName && <p className="text-xs text-gray-400 truncate">{subtitle}</p>}
-                      </div>
-                    </button>
-                  )
-                })}
+                {suggestions.map((item) => (
+                  <button
+                    key={item.placeId}
+                    type="button"
+                    onClick={() => selectSuggestion(item)}
+                    className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                  >
+                    <MapPin size={14} className="text-violet-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{item.mainText}</p>
+                      {item.secondaryText && <p className="text-xs text-gray-400 truncate">{item.secondaryText}</p>}
+                    </div>
+                  </button>
+                ))}
               </motion.div>
             )}
           </AnimatePresence>
@@ -243,21 +270,6 @@ export function AddPlacePage() {
             onChange={(e) => setCuisine(e.target.value)}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-white placeholder:text-gray-300"
           />
-        </div>
-
-        {/* Google Maps location */}
-        <div>
-          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Location</label>
-          <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
-            <MapPin size={15} className="text-blue-400 shrink-0" />
-            <input
-              type="text"
-              placeholder="Google Maps location (auto-filled from name)"
-              value={mapsSearch}
-              onChange={(e) => setMapsSearch(e.target.value)}
-              className="flex-1 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
-            />
-          </div>
         </div>
 
         {/* Cover photo */}

@@ -111,21 +111,43 @@ export function PlaceDetailPage() {
     const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY
     if (!apiKey) return
     try {
-      const query = new URL(mapsUrl).searchParams.get('query')
-      if (!query) return
-      const searchRes = await fetch(
-        `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(query)}&inputtype=textquery&fields=place_id&key=${apiKey}`
-      )
-      const searchData = await searchRes.json()
-      const placeId = searchData.candidates?.[0]?.place_id
+      let placeId: string | null = null
+
+      // New format: place_id embedded in URL
+      const placeIdMatch = mapsUrl.match(/place_id:([^&]+)/)
+      if (placeIdMatch) {
+        placeId = placeIdMatch[1]
+      } else {
+        // Legacy format: search by query using Places text search
+        const query = (() => { try { return new URL(mapsUrl).searchParams.get('query') } catch { return null } })()
+        if (!query) return
+        const searchRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': 'places.id',
+          },
+          body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
+        })
+        const searchData = await searchRes.json()
+        placeId = searchData.places?.[0]?.id ?? null
+      }
+
       if (!placeId) return
+
       const detailRes = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=website,formatted_phone_number&key=${apiKey}`
+        `https://places.googleapis.com/v1/places/${placeId}`,
+        {
+          headers: {
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': 'websiteUri,nationalPhoneNumber',
+          },
+        }
       )
-      const detailData = await detailRes.json()
-      const result = detailData.result ?? {}
-      const website = result.website as string | undefined
-      const phone = result.formatted_phone_number as string | undefined
+      const detail = await detailRes.json()
+      const website = detail.websiteUri as string | undefined
+      const phone = detail.nationalPhoneNumber as string | undefined
       const instagram = website?.includes('instagram.com') ? website : undefined
       setGoogleLinks({
         website: instagram ? undefined : website,
