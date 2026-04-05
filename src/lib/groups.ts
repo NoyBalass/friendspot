@@ -64,6 +64,14 @@ export async function getGroupById(groupId: string) {
   return data
 }
 
+export async function updateGroup(groupId: string, payload: { name?: string; description?: string; type?: string }) {
+  const { data, error } = await supabase.from('groups').update(payload).eq('id', groupId).select().single()
+  if (error) throw error
+  cacheInvalidate(`group:${groupId}`)
+  cacheInvalidate(`groups:`)
+  return data
+}
+
 export async function getGroupByInviteCode(code: string) {
   const { data, error } = await supabase
     .from('groups').select('*').eq('invite_code', code.toUpperCase()).single()

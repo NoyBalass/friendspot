@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Link, X, Copy, Check } from 'lucide-react'
+import { Plus, Link, X, Copy, Check, Settings } from 'lucide-react'
 
 function DancingDots() {
   return (
@@ -18,7 +18,7 @@ function DancingDots() {
   )
 }
 import { useAuthStore } from '../store/useAuthStore'
-import { getUserGroups, createGroup, joinGroupByCode } from '../lib/groups'
+import { getUserGroups, createGroup, joinGroupByCode, updateGroup } from '../lib/groups'
 import type { Group, GroupType } from '../types'
 
 const GROUP_TYPES: { value: GroupType; label: string; emoji: string }[] = [
@@ -41,6 +41,11 @@ export function GroupsPage() {
   const [code, setCode] = useState('')
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState('')
+  const [editingGroup, setEditingGroup] = useState<Group | null>(null)
+  const [editType, setEditType] = useState<GroupType>('all')
+  const [editName, setEditName] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
     if (user) load()
@@ -86,6 +91,28 @@ export function GroupsPage() {
       alert(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  function openEditGroup(group: Group) {
+    setEditingGroup(group)
+    setEditName(group.name)
+    setEditDesc(group.description ?? '')
+    setEditType((group.type ?? 'all') as GroupType)
+  }
+
+  async function saveEditGroup(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingGroup) return
+    setEditSaving(true)
+    try {
+      await updateGroup(editingGroup.id, { name: editName, description: editDesc, type: editType })
+      setEditingGroup(null)
+      load()
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -144,7 +171,7 @@ export function GroupsPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 pt-3 border-t border-gray-50">
+                <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between">
                   <button
                     onClick={() => copyInvite(group)}
                     className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-500 transition-colors"
@@ -155,6 +182,14 @@ export function GroupsPage() {
                       <><Copy size={13} /> Copy invite link</>
                     )}
                   </button>
+                  {group.created_by === user?.id && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openEditGroup(group) }}
+                      className="flex items-center gap-1 text-xs text-gray-300 hover:text-violet-500 transition-colors"
+                    >
+                      <Settings size={13} /> Edit
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ))}
@@ -268,6 +303,76 @@ export function GroupsPage() {
                   </button>
                 </form>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit group modal */}
+      <AnimatePresence>
+        {editingGroup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center px-5"
+            onClick={() => setEditingGroup(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ type: 'spring', damping: 30, stiffness: 400 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-xl"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-lg font-semibold text-gray-900">Edit group</h2>
+                <button onClick={() => setEditingGroup(null)} className="text-gray-400"><X size={20} /></button>
+              </div>
+              <form onSubmit={saveEditGroup} className="flex flex-col gap-4">
+                <input
+                  type="text"
+                  placeholder="Group name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300"
+                />
+                <input
+                  type="text"
+                  placeholder="Description (optional)"
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300"
+                />
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Group type</p>
+                  <div className="flex flex-wrap gap-2">
+                    {GROUP_TYPES.map((t) => (
+                      <button
+                        key={t.value}
+                        type="button"
+                        onClick={() => setEditType(t.value)}
+                        className={`px-3 py-1.5 rounded-xl text-sm border transition-all ${
+                          editType === t.value
+                            ? 'bg-violet-500 text-white border-violet-500'
+                            : 'bg-white text-gray-500 border-gray-200'
+                        }`}
+                      >
+                        {t.emoji} {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="py-3 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {editSaving ? <DancingDots /> : 'Save changes'}
+                </button>
+              </form>
             </motion.div>
           </motion.div>
         )}
