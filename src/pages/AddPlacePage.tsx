@@ -23,6 +23,44 @@ interface Suggestion {
   secondaryText: string
 }
 
+// Load Maps JS API once and cache the promise
+let mapsApiPromise: Promise<void> | null = null
+function loadMapsApi(): Promise<void> {
+  const g = (window as any).google
+  if (g?.maps?.places) return Promise.resolve()
+  if (mapsApiPromise) return mapsApiPromise
+  mapsApiPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&libraries=places`
+    s.async = true
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error('Maps failed to load'))
+    document.head.appendChild(s)
+  })
+  return mapsApiPromise
+}
+
+function getPlacePredictions(input: string, isHebrew: boolean): Promise<Suggestion[]> {
+  return new Promise((resolve) => {
+    const google = (window as any).google
+    const service = new google.maps.places.AutocompleteService()
+    service.getPlacePredictions(
+      { input, componentRestrictions: { country: 'il' }, language: isHebrew ? 'he' : 'en' },
+      (predictions: any[], status: string) => {
+        if (status === 'OK' && predictions) {
+          resolve(predictions.map((p: any) => ({
+            placeId: p.place_id,
+            mainText: p.structured_formatting?.main_text ?? p.description,
+            secondaryText: p.structured_formatting?.secondary_text ?? '',
+          })))
+        } else {
+          resolve([])
+        }
+      }
+    )
+  })
+}
+
 export function AddPlacePage() {
   const { groupId } = useParams<{ groupId: string }>()
   const navigate = useNavigate()
@@ -81,29 +119,8 @@ export function AddPlacePage() {
     searchTimer.current = setTimeout(async () => {
       try {
         const isHebrew = /[\u0590-\u05FF]/.test(value)
-        const res = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': GOOGLE_API_KEY },
-          body: JSON.stringify({
-            input: value,
-            languageCode: isHebrew ? 'he' : 'en',
-            // bias strongly toward Israel
-            locationBias: {
-              circle: {
-                center: { latitude: 31.5, longitude: 34.85 },
-                radius: 150000,
-              },
-            },
-          }),
-        })
-        const data = await res.json()
-        const items: Suggestion[] = (data.suggestions ?? [])
-          .filter((s: any) => s.placePrediction)
-          .map((s: any) => ({
-            placeId: s.placePrediction.placeId,
-            mainText: s.placePrediction.structuredFormat?.mainText?.text ?? s.placePrediction.text?.text ?? '',
-            secondaryText: s.placePrediction.structuredFormat?.secondaryText?.text ?? '',
-          }))
+        await loadMapsApi()
+        const items = await getPlacePredictions(value, isHebrew)
         setSuggestions(items)
         setShowSuggestions(items.length > 0)
       } catch {}
