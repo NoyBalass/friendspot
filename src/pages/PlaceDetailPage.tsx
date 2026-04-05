@@ -219,10 +219,18 @@ export function PlaceDetailPage() {
 
   if (!place) return null
 
-  // Build Google Maps embed URL from stored search URL
-  const mapsQuery = place.google_maps_url
-    ? new URL(place.google_maps_url).searchParams.get('query')
-    : null
+  // Build query for map embed — handle both old search URL and new place_id URL
+  const mapsQuery = (() => {
+    if (!place.google_maps_url) return null
+    try {
+      const url = new URL(place.google_maps_url)
+      // New format: place_id-based → use place name as embed query
+      const placeIdParam = url.searchParams.get('q')
+      if (placeIdParam?.startsWith('place_id:')) return place.name
+      // Old format: search query
+      return url.searchParams.get('query')
+    } catch { return null }
+  })()
 
   return (
     <div className="min-h-svh bg-[#fafaf8] pb-28">

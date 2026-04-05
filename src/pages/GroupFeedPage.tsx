@@ -42,8 +42,10 @@ export function GroupFeedPage() {
   }, [search])
 
   async function loadGroup() {
-    const data = await getGroupById(groupId!)
-    setGroup(data)
+    try {
+      const data = await getGroupById(groupId!)
+      setGroup(data)
+    } catch {}
   }
 
   async function loadPlaces(showSpinner = false) {

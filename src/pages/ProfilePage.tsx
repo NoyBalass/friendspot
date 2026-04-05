@@ -176,11 +176,11 @@ export function ProfilePage() {
     setDeleting(true)
     try {
       await deleteGroup(groupId)
-      setConfirmDeleteId(null)
       loadGroups()
     } catch (err: any) {
       alert(err.message)
     } finally {
+      setConfirmDeleteId(null)
       setDeleting(false)
     }
   }

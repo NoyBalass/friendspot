@@ -97,6 +97,9 @@ export function AddPlacePage() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  // Cleanup debounce timer on unmount
+  useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current) }, [])
+
   function handleNameChange(value: string) {
     setName(value)
     setLinkedPlaceId('')   // user is editing manually — unlink
