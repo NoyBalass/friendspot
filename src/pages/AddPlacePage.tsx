@@ -15,13 +15,18 @@ const CATEGORIES: { value: Category; label: string; emoji: string }[] = [
   { value: 'other', label: 'Other', emoji: '📍' },
 ]
 
-interface NominatimResult {
-  place_id: number
-  display_name: string
-  name: string
-  lat: string
-  lon: string
-  address?: { road?: string; city?: string; country?: string }
+interface PhotonFeature {
+  type: 'Feature'
+  geometry: { type: 'Point'; coordinates: [number, number] }
+  properties: {
+    osm_id: number
+    name?: string
+    street?: string
+    city?: string
+    country?: string
+    state?: string
+    type?: string
+  }
 }
 
 export function AddPlacePage() {
@@ -58,7 +63,7 @@ export function AddPlacePage() {
   const [saving, setSaving] = useState(false)
 
   // Autocomplete state
-  const [suggestions, setSuggestions] = useState<NominatimResult[]>([])
+  const [suggestions, setSuggestions] = useState<PhotonFeature[]>([])
   const [searching, setSearching] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -83,23 +88,27 @@ export function AddPlacePage() {
     searchTimer.current = setTimeout(async () => {
       try {
         const isHebrew = /[\u0590-\u05FF]/.test(value)
+        // Photon: OSM-powered POI search, biased to Israel (lon=34.85, lat=31.5)
+        const lang = isHebrew ? 'he' : 'en'
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value)}&format=json&limit=5&addressdetails=1`,
-          { headers: { 'Accept-Language': isHebrew ? 'he,en' : 'en,he' } }
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=6&lang=${lang}&lon=34.85&lat=31.5`
         )
-        const data: NominatimResult[] = await res.json()
-        setSuggestions(data)
-        setShowSuggestions(data.length > 0)
+        const json = await res.json()
+        const features: PhotonFeature[] = json.features ?? []
+        setSuggestions(features)
+        setShowSuggestions(features.length > 0)
       } catch {}
       setSearching(false)
     }, 400)
   }
 
-  function selectSuggestion(item: NominatimResult) {
-    const placeName = item.name || item.display_name.split(',')[0]
-    setName(placeName)
-    // Build a precise maps search from the full display name
-    setMapsSearch(item.display_name)
+  function selectSuggestion(item: PhotonFeature) {
+    const p = item.properties
+    const placeName = p.name ?? ''
+    const parts = [p.street, p.city, p.country].filter(Boolean).join(', ')
+    const mapsQuery = placeName ? `${placeName}${parts ? ', ' + parts : ''}` : parts
+    setName(placeName || parts)
+    setMapsSearch(mapsQuery)
     setSuggestions([])
     setShowSuggestions(false)
   }
@@ -185,20 +194,21 @@ export function AddPlacePage() {
                 exit={{ opacity: 0, y: -4 }}
                 className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-100 rounded-2xl shadow-lg z-50 overflow-hidden"
               >
-                {suggestions.map((item) => {
-                  const placeName = item.name || item.display_name.split(',')[0]
-                  const subtitle = item.display_name.split(',').slice(1, 3).join(',').trim()
+                {suggestions.map((item, i) => {
+                  const p = item.properties
+                  const placeName = p.name
+                  const subtitle = [p.street, p.city, p.country].filter(Boolean).join(', ')
                   return (
                     <button
-                      key={item.place_id}
+                      key={`${p.osm_id}-${i}`}
                       type="button"
                       onClick={() => selectSuggestion(item)}
                       className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
                     >
                       <MapPin size={14} className="text-violet-400 mt-0.5 shrink-0" />
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{placeName}</p>
-                        <p className="text-xs text-gray-400 truncate">{subtitle}</p>
+                        <p className="text-sm font-medium text-gray-800 truncate">{placeName || subtitle}</p>
+                        {placeName && <p className="text-xs text-gray-400 truncate">{subtitle}</p>}
                       </div>
                     </button>
                   )
