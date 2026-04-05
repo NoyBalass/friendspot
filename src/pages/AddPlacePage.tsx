@@ -82,9 +82,10 @@ export function AddPlacePage() {
     setSearching(true)
     searchTimer.current = setTimeout(async () => {
       try {
+        const isHebrew = /[\u0590-\u05FF]/.test(value)
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value)}&format=json&limit=5&addressdetails=1`,
-          { headers: { 'Accept-Language': 'en' } }
+          { headers: { 'Accept-Language': isHebrew ? 'he,en' : 'en,he' } }
         )
         const data: NominatimResult[] = await res.json()
         setSuggestions(data)
