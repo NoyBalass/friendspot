@@ -37,6 +37,10 @@ export function GroupFeedPage() {
     loadPlaces(true)
   }, [category])
 
+  useEffect(() => {
+    loadPlaces(false)
+  }, [search])
+
   async function loadGroup() {
     const data = await getGroupById(groupId!)
     setGroup(data)
@@ -58,7 +62,6 @@ export function GroupFeedPage() {
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
-    loadPlaces()
   }
 
   return (

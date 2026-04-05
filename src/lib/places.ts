@@ -3,17 +3,22 @@ import { cacheGet, cacheSet, cacheInvalidate } from './cache'
 import type { Category } from '../types'
 
 export async function getGroupPlaces(groupId: string, category?: Category, search?: string) {
-  const key = `places:${groupId}:${category ?? ''}:${search ?? ''}`
+  const key = `places:${groupId}:${category ?? ''}`
   const cached = cacheGet<any[]>(key)
-  if (cached) {
-    // return cache immediately, refresh in background
-    fetchAndCachePlaces(key, groupId, category, search)
-    return cached
-  }
-  return fetchAndCachePlaces(key, groupId, category, search)
+  const base = cached ?? await fetchAndCachePlaces(key, groupId, category)
+  if (cached) fetchAndCachePlaces(key, groupId, category) // background refresh
+
+  if (!search) return base
+  const q = search.toLowerCase()
+  return base.filter((p: any) =>
+    p.name?.toLowerCase().includes(q) ||
+    p.cuisine?.toLowerCase().includes(q) ||
+    p.address?.toLowerCase().includes(q) ||
+    p.added_by_user?.nickname?.toLowerCase().includes(q)
+  )
 }
 
-async function fetchAndCachePlaces(key: string, groupId: string, category?: Category, search?: string) {
+async function fetchAndCachePlaces(key: string, groupId: string, category?: Category) {
   let query = supabase
     .from('places')
     .select(`
@@ -25,7 +30,6 @@ async function fetchAndCachePlaces(key: string, groupId: string, category?: Cate
     .order('created_at', { ascending: false })
 
   if (category) query = query.eq('category', category)
-  if (search) query = query.ilike('name', `%${search}%`)
 
   const { data, error } = await query
   if (error) throw error
