@@ -105,13 +105,13 @@ export function ReviewCard({ review, index = 0, currentUserId, onPhotoAdded, onD
       )}
 
       {review.photos && review.photos.length > 0 && (
-        <div className={`mt-3 grid gap-1.5 ${review.photos.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div className="mt-3 flex gap-1.5 overflow-x-auto scrollbar-hide">
           {review.photos.map((photo) => (
             <img
               key={photo.id}
               src={photo.photo_url}
               alt="review photo"
-              className="rounded-xl w-full object-cover aspect-square"
+              className="w-16 h-16 rounded-lg object-cover shrink-0"
             />
           ))}
         </div>

@@ -159,6 +159,23 @@ export async function uploadReviewPhoto(reviewId: string, file: File) {
   return publicUrl
 }
 
+export async function uploadPlaceCoverPhoto(placeId: string, file: File) {
+  const ext = file.name.split('.').pop()
+  const path = `places/${placeId}/cover.${ext}`
+
+  const { error: uploadError } = await supabase.storage.from('photos').upload(path, file, { upsert: true })
+  if (uploadError) throw uploadError
+
+  const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(path)
+
+  const { error } = await supabase.from('places').update({ cover_photo: publicUrl }).eq('id', placeId)
+  if (error) throw error
+
+  cacheInvalidate(`place:${placeId}`)
+  cacheInvalidate(`places:`)
+  return publicUrl
+}
+
 export async function updatePlace(placeId: string, payload: {
   name?: string
   cuisine?: string
@@ -167,6 +184,7 @@ export async function updatePlace(placeId: string, payload: {
   wolt_url?: string
   tabit_url?: string
   website_url?: string
+  cover_photo?: string
 }) {
   const { data, error } = await supabase.from('places').update(payload).eq('id', placeId).select().single()
   if (error) throw error

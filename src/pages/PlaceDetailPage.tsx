@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, MapPin, Globe, ExternalLink, Plus, Pencil, X, Camera, Settings } from 'lucide-react'
-import { getPlaceById, getPlaceReviews, upsertReview, uploadReviewPhoto, getUserReviewForPlace, updatePlace } from '../lib/places'
+import { ChevronLeft, MapPin, Globe, ExternalLink, Plus, Pencil, X, Camera, Settings, ImagePlus } from 'lucide-react'
+import { getPlaceById, getPlaceReviews, upsertReview, uploadReviewPhoto, getUserReviewForPlace, updatePlace, uploadPlaceCoverPhoto } from '../lib/places'
 import { StarRating } from '../components/StarRating'
 import { ReviewCard } from '../components/ReviewCard'
 import { CategoryBadge } from '../components/CategoryBadge'
@@ -43,6 +43,8 @@ export function PlaceDetailPage() {
   const [editTabit, setEditTabit] = useState('')
   const [editWebsite, setEditWebsite] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const [editCoverFile, setEditCoverFile] = useState<File | null>(null)
+  const [editCoverPreview, setEditCoverPreview] = useState<string | null>(null)
 
   useEffect(() => {
     if (placeId && user) load()
@@ -85,6 +87,8 @@ export function PlaceDetailPage() {
     setEditWolt(place.wolt_url ?? '')
     setEditTabit(place.tabit_url ?? '')
     setEditWebsite(place.website_url ?? '')
+    setEditCoverFile(null)
+    setEditCoverPreview(place.cover_photo ?? null)
     setShowEdit(true)
   }
 
@@ -92,6 +96,9 @@ export function PlaceDetailPage() {
     e.preventDefault()
     setEditSaving(true)
     try {
+      if (editCoverFile) {
+        await uploadPlaceCoverPhoto(placeId!, editCoverFile)
+      }
       await updatePlace(placeId!, {
         name: editName,
         cuisine: editCuisine || undefined,
@@ -108,6 +115,13 @@ export function PlaceDetailPage() {
     } finally {
       setEditSaving(false)
     }
+  }
+
+  function handleCoverFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setEditCoverFile(file)
+    setEditCoverPreview(URL.createObjectURL(file))
   }
 
   function openReviewSheet() {
@@ -311,6 +325,30 @@ export function PlaceDetailPage() {
               </div>
 
               <form onSubmit={saveEdit} className="flex flex-col gap-4">
+                {/* Cover photo */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Cover photo</p>
+                  <label className="relative block cursor-pointer group">
+                    <div className="w-full h-28 rounded-xl overflow-hidden bg-gray-50 border border-gray-200 border-dashed flex items-center justify-center">
+                      {editCoverPreview ? (
+                        <img src={editCoverPreview} alt="cover" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="flex flex-col items-center gap-1 text-gray-300 group-hover:text-violet-400 transition-colors">
+                          <ImagePlus size={22} />
+                          <span className="text-xs">Upload cover photo</span>
+                        </div>
+                      )}
+                      {editCoverPreview && (
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
+                          <ImagePlus size={20} className="text-white" />
+                        </div>
+                      )}
+                    </div>
+                    <input type="file" accept="image/*" onChange={handleCoverFileChange} className="hidden" />
+                  </label>
+                  <p className="text-xs text-gray-300 mt-1.5">If left empty, the Google Maps location will be shown instead</p>
+                </div>
+
                 <input
                   type="text"
                   placeholder="Place name"
