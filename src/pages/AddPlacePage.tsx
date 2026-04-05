@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, MapPin, Globe, ExternalLink, Search } from 'lucide-react'
-import { createPlace, createReview } from '../lib/places'
+import { ChevronLeft, MapPin, Globe, ExternalLink, Search, ImagePlus } from 'lucide-react'
+import { createPlace, createReview, uploadPlaceCoverPhoto } from '../lib/places'
 import { getGroupById } from '../lib/groups'
 import { StarRating } from '../components/StarRating'
 import { useAuthStore } from '../store/useAuthStore'
@@ -51,6 +51,8 @@ export function AddPlacePage() {
   const [wolt, setWolt] = useState('')
   const [tabit, setTabit] = useState('')
   const [website, setWebsite] = useState('')
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [rating, setRating] = useState(0)
   const [reviewText, setReviewText] = useState('')
   const [saving, setSaving] = useState(false)
@@ -119,6 +121,10 @@ export function AddPlacePage() {
         website_url: website || undefined,
         added_by: user!.id,
       })
+
+      if (coverFile) {
+        await uploadPlaceCoverPhoto(place.id, coverFile)
+      }
 
       if (rating > 0) {
         await createReview({
@@ -268,6 +274,39 @@ export function AddPlacePage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Cover photo */}
+        <div>
+          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Cover photo</label>
+          <label className="relative block cursor-pointer group">
+            <div className="w-full h-28 rounded-xl overflow-hidden bg-white border border-gray-200 border-dashed flex items-center justify-center">
+              {coverPreview ? (
+                <img src={coverPreview} alt="cover" className="w-full h-full object-cover" />
+              ) : (
+                <div className="flex flex-col items-center gap-1 text-gray-300 group-hover:text-violet-400 transition-colors">
+                  <ImagePlus size={22} />
+                  <span className="text-xs">Upload cover photo (optional)</span>
+                </div>
+              )}
+              {coverPreview && (
+                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
+                  <ImagePlus size={20} className="text-white" />
+                </div>
+              )}
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                setCoverFile(file)
+                setCoverPreview(URL.createObjectURL(file))
+              }}
+            />
+          </label>
         </div>
 
         {/* Initial review */}
