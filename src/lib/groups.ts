@@ -46,7 +46,7 @@ export async function getUserGroups(userId: string) {
 async function fetchAndCacheGroups(key: string, userId: string) {
   const { data, error } = await supabase
     .from('group_members')
-    .select(`group_id, role, groups ( id, name, description, invite_code, created_by, created_at )`)
+    .select(`group_id, role, groups ( id, name, description, type, invite_code, created_by, created_at )`)
     .eq('user_id', userId)
   if (error) throw error
   const result = data?.map((m: any) => ({ ...m.groups, role: m.role })) ?? []
