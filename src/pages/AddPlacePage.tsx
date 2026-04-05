@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ChevronLeft, MapPin, Globe, ExternalLink } from 'lucide-react'
 import { createPlace, createReview } from '../lib/places'
+import { getGroupById } from '../lib/groups'
 import { StarRating } from '../components/StarRating'
 import { useAuthStore } from '../store/useAuthStore'
-import type { Category } from '../types'
+import type { Category, GroupType } from '../types'
 
 const CATEGORIES: { value: Category; label: string; emoji: string }[] = [
   { value: 'restaurant', label: 'Restaurant', emoji: '🍽' },
@@ -18,6 +19,15 @@ export function AddPlacePage() {
   const { groupId } = useParams<{ groupId: string }>()
   const navigate = useNavigate()
   const { user } = useAuthStore()
+  const [groupType, setGroupType] = useState<GroupType>('all')
+
+  useEffect(() => {
+    if (groupId) getGroupById(groupId).then(g => setGroupType(g.type ?? 'all')).catch(() => {})
+  }, [groupId])
+
+  const availableCategories = groupType === 'all'
+    ? CATEGORIES
+    : CATEGORIES.filter(c => c.value === groupType)
 
   const [name, setName] = useState('')
   const [category, setCategory] = useState<Category>('restaurant')
@@ -95,7 +105,7 @@ export function AddPlacePage() {
         <div>
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Category</label>
           <div className="flex gap-2 flex-wrap">
-            {CATEGORIES.map((cat) => (
+            {availableCategories.map((cat) => (
               <button
                 key={cat.value}
                 type="button"

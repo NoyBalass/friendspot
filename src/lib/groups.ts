@@ -5,11 +5,11 @@ function generateInviteCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase()
 }
 
-export async function createGroup(name: string, description: string, userId: string) {
+export async function createGroup(name: string, description: string, userId: string, type: string = 'all') {
   const invite_code = generateInviteCode()
   const { data: group, error } = await supabase
     .from('groups')
-    .insert({ name, description, invite_code, created_by: userId })
+    .insert({ name, description, invite_code, created_by: userId, type })
     .select()
     .single()
   if (error) throw error

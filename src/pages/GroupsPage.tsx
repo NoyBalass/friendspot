@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Link, Users, X, Copy, Check } from 'lucide-react'
+import { Plus, Link, X, Copy, Check } from 'lucide-react'
 
 function DancingDots() {
   return (
@@ -19,7 +19,15 @@ function DancingDots() {
 }
 import { useAuthStore } from '../store/useAuthStore'
 import { getUserGroups, createGroup, joinGroupByCode } from '../lib/groups'
-import type { Group } from '../types'
+import type { Group, GroupType } from '../types'
+
+const GROUP_TYPES: { value: GroupType; label: string; emoji: string }[] = [
+  { value: 'all', label: 'Mixed', emoji: '✨' },
+  { value: 'restaurant', label: 'Restaurants', emoji: '🍽' },
+  { value: 'bar', label: 'Bars', emoji: '🍸' },
+  { value: 'coffee', label: 'Coffee', emoji: '☕' },
+  { value: 'other', label: 'Other', emoji: '📍' },
+]
 
 export function GroupsPage() {
   const { user } = useAuthStore()
@@ -29,6 +37,7 @@ export function GroupsPage() {
   const [modal, setModal] = useState<null | 'create' | 'join'>(null)
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
+  const [groupType, setGroupType] = useState<GroupType>('all')
   const [code, setCode] = useState('')
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState('')
@@ -52,10 +61,11 @@ export function GroupsPage() {
     e.preventDefault()
     setSaving(true)
     try {
-      await createGroup(name, desc, user!.id)
+      await createGroup(name, desc, user!.id, groupType)
       setModal(null)
       setName('')
       setDesc('')
+      setGroupType('all')
       load()
     } catch (err: any) {
       alert(err.message)
@@ -123,13 +133,14 @@ export function GroupsPage() {
                   onClick={() => navigate(`/group/${group.id}`)}
                 >
                   <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-lg shrink-0">
-                    <Users size={18} className="text-violet-400" />
+                    {GROUP_TYPES.find(t => t.value === group.type)?.emoji ?? '✨'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 text-base">{group.name}</p>
-                    {group.description && (
-                      <p className="text-sm text-gray-400 mt-0.5 truncate">{group.description}</p>
-                    )}
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {GROUP_TYPES.find(t => t.value === group.type)?.label ?? 'Mixed'}
+                      {group.description ? ` · ${group.description}` : ''}
+                    </p>
                   </div>
                 </div>
 
@@ -211,6 +222,25 @@ export function GroupsPage() {
                     onChange={(e) => setDesc(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300"
                   />
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Group type</p>
+                    <div className="flex flex-wrap gap-2">
+                      {GROUP_TYPES.map((t) => (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setGroupType(t.value)}
+                          className={`px-3 py-1.5 rounded-xl text-sm border transition-all ${
+                            groupType === t.value
+                              ? 'bg-violet-500 text-white border-violet-500'
+                              : 'bg-white text-gray-500 border-gray-200'
+                          }`}
+                        >
+                          {t.emoji} {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <button
                     type="submit"
                     disabled={saving}

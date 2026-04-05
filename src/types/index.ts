@@ -1,4 +1,5 @@
 export type Category = 'restaurant' | 'bar' | 'coffee' | 'other'
+export type GroupType = 'all' | 'restaurant' | 'bar' | 'coffee' | 'other'
 
 export interface User {
   id: string
@@ -12,6 +13,7 @@ export interface Group {
   id: string
   name: string
   description?: string
+  type: GroupType
   invite_code: string
   created_by: string
   created_at: string
