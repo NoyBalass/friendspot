@@ -155,6 +155,22 @@ export async function uploadReviewPhoto(reviewId: string, file: File) {
   return publicUrl
 }
 
+export async function updatePlace(placeId: string, payload: {
+  name?: string
+  cuisine?: string
+  google_maps_url?: string
+  instagram_url?: string
+  wolt_url?: string
+  tabit_url?: string
+  website_url?: string
+}) {
+  const { data, error } = await supabase.from('places').update(payload).eq('id', placeId).select().single()
+  if (error) throw error
+  cacheInvalidate(`place:${placeId}`)
+  cacheInvalidate(`places:`)
+  return data
+}
+
 export async function deletePlace(placeId: string) {
   const { error } = await supabase.from('places').delete().eq('id', placeId)
   if (error) throw error
