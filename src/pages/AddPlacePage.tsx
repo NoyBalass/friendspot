@@ -31,12 +31,17 @@ export function AddPlacePage() {
   const [groupType, setGroupType] = useState<GroupType>('all')
 
   useEffect(() => {
-    if (groupId) getGroupById(groupId).then(g => setGroupType(g.type ?? 'all')).catch(() => {})
+    if (groupId) getGroupById(groupId).then(g => {
+      const t = g.type ?? 'all'
+      setGroupType(t)
+      if (t !== 'all') setCategory(t as Category)
+    }).catch(() => {})
   }, [groupId])
 
-  const availableCategories = groupType === 'all'
-    ? CATEGORIES
-    : CATEGORIES.filter(c => c.value === groupType)
+  const isSpecificType = groupType !== 'all'
+  const availableCategories = isSpecificType
+    ? CATEGORIES.filter(c => c.value === groupType)
+    : CATEGORIES
 
   const [name, setName] = useState('')
   const [category, setCategory] = useState<Category>('restaurant')
@@ -196,26 +201,28 @@ export function AddPlacePage() {
           </AnimatePresence>
         </div>
 
-        {/* Category */}
-        <div>
-          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Category</label>
-          <div className="flex gap-2 flex-wrap">
-            {availableCategories.map((cat) => (
-              <button
-                key={cat.value}
-                type="button"
-                onClick={() => setCategory(cat.value)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
-                  category === cat.value
-                    ? 'bg-violet-500 text-white border-violet-500'
-                    : 'bg-white text-gray-500 border-gray-200'
-                }`}
-              >
-                {cat.emoji} {cat.label}
-              </button>
-            ))}
+        {/* Category — only shown for mixed groups */}
+        {!isSpecificType && (
+          <div>
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Category</label>
+            <div className="flex gap-2 flex-wrap">
+              {availableCategories.map((cat) => (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => setCategory(cat.value)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                    category === cat.value
+                      ? 'bg-violet-500 text-white border-violet-500'
+                      : 'bg-white text-gray-500 border-gray-200'
+                  }`}
+                >
+                  {cat.emoji} {cat.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Cuisine */}
         <div>
