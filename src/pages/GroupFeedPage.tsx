@@ -12,18 +12,10 @@ import { CommentsSheet } from '../components/CommentsSheet'
 import { useAuthStore } from '../store/useAuthStore'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { supabase } from '../lib/supabase'
+import { useT } from '../lib/i18n'
 import type { Place, Category } from '../types'
 
-const CATEGORIES: { value: Category | 'all'; label: string }[] = [
-  { value: 'all', label: '✨ All' },
-  { value: 'restaurant', label: '🍽 Restaurant' },
-  { value: 'bar', label: '🍸 Bar' },
-  { value: 'coffee', label: '☕ Coffee' },
-  { value: 'bakery', label: '🥐 Bakery' },
-  { value: 'dessert', label: '🍦 Dessert' },
-  { value: 'nightclub', label: '🎉 Nightclub' },
-  { value: 'other', label: '📍 Other' },
-]
+const CATEGORY_KEYS: (Category | 'all')[] = ['all', 'restaurant', 'bar', 'coffee', 'bakery', 'dessert', 'nightclub', 'other']
 
 const STAR_COLORS = ['', 'text-red-400', 'text-orange-400', 'text-amber-400', 'text-lime-500', 'text-emerald-500']
 
@@ -40,6 +32,7 @@ type CommentSheetState = { placeId: string; targetType: import('../lib/comments'
 
 function ActivityFeed({ groupId }: { groupId: string }) {
   const navigate = useNavigate()
+  const t = useT()
   const [items, setItems] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
   const [counts, setCounts] = useState<Record<string, number>>({})
@@ -83,9 +76,9 @@ function ActivityFeed({ groupId }: { groupId: string }) {
   function openSheet(e: React.MouseEvent, item: ActivityItem) {
     e.stopPropagation()
     let title = ''
-    if (item.type === 'place') title = `Replies · ${item.place_name}`
-    else if (item.type === 'review') title = `Replies · ${item.user?.nickname}'s review`
-    else title = `Replies · ${item.user?.nickname} been to ${item.place_name}`
+    if (item.type === 'place') title = `${t.comments.repliesTitle} · ${item.place_name}`
+    else if (item.type === 'review') title = `${t.comments.repliesTitle} · ${item.user?.nickname}`
+    else title = `${t.comments.repliesTitle} · ${item.user?.nickname}`
     setSheet({ placeId: item.place_id, targetType: item.commentTargetType, targetId: item.commentTargetId, title })
   }
 
@@ -118,7 +111,7 @@ function ActivityFeed({ groupId }: { groupId: string }) {
   if (items.length === 0) return (
     <div className="text-center pt-16 text-gray-400">
       <div className="text-4xl mb-3">🕊</div>
-      <p className="text-sm">No activity yet.</p>
+      <p className="text-sm">{t.feed.noActivity}</p>
     </div>
   )
 
@@ -155,7 +148,7 @@ function ActivityFeed({ groupId }: { groupId: string }) {
 
                 {item.type === 'place' && (
                   <>
-                    <p className="text-xs text-violet-400 font-medium mb-0.5">📍 Added a new place</p>
+                    <p className="text-xs text-violet-400 font-medium mb-0.5">{t.activity.addedPlace}</p>
                     <p dir="auto" className="text-sm font-semibold text-gray-900 truncate">{item.place_name}</p>
                   </>
                 )}
@@ -172,7 +165,7 @@ function ActivityFeed({ groupId }: { groupId: string }) {
                 )}
                 {item.type === 'checkin' && (
                   <>
-                    <p className="text-xs text-emerald-500 font-medium mb-0.5">✅ Been there</p>
+                    <p className="text-xs text-emerald-500 font-medium mb-0.5">{t.activity.beenThere}</p>
                     <p dir="auto" className="text-sm font-semibold text-gray-900 truncate">{item.place_name}</p>
                   </>
                 )}
@@ -183,7 +176,7 @@ function ActivityFeed({ groupId }: { groupId: string }) {
                   className="flex items-center gap-1 mt-2 text-xs text-gray-400 hover:text-violet-500 transition-colors"
                 >
                   <MessageCircle size={12} />
-                  <span>{counts[item.commentTargetId] ? `${counts[item.commentTargetId]} ${counts[item.commentTargetId] === 1 ? 'reply' : 'replies'}` : 'Reply'}</span>
+                  <span>{counts[item.commentTargetId] ? `${counts[item.commentTargetId]} ${t.activity.replies}` : t.activity.reply}</span>
                 </button>
               </div>
             </div>
@@ -209,6 +202,7 @@ export function GroupFeedPage() {
   const { groupId } = useParams<{ groupId: string }>()
   const navigate = useNavigate()
   const { user } = useAuthStore()
+  const t = useT()
   const [group, setGroup] = useState<any>(null)
   const [places, setPlaces] = useState<Place[]>([])
   const [loading, setLoading] = useState(true)
@@ -284,15 +278,15 @@ export function GroupFeedPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-3">
-          {(['places', 'activity'] as const).map(t => (
+          {(['places', 'activity'] as const).map(tabKey => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tabKey}
+              onClick={() => setTab(tabKey)}
               className={`flex-1 text-xs font-medium py-1.5 rounded-lg transition-all capitalize ${
-                tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'
+                tab === tabKey ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'
               }`}
             >
-              {t === 'places' ? `📍 Places${places.length ? ` (${places.length})` : ''}` : '⚡ Activity'}
+              {tabKey === 'places' ? `📍 ${t.feed.places}${places.length ? ` (${places.length})` : ''}` : `⚡ ${t.feed.activity}`}
             </button>
           ))}
         </div>
@@ -306,22 +300,22 @@ export function GroupFeedPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search places..."
+                placeholder={t.feed.searchPlaces}
                 className="flex-1 text-sm outline-none bg-transparent placeholder:text-gray-300"
               />
             </form>
             <div className="flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-hide">
-              {CATEGORIES.map((cat) => (
+              {CATEGORY_KEYS.map((val) => (
                 <button
-                  key={cat.value}
-                  onClick={() => setCategory(cat.value)}
+                  key={val}
+                  onClick={() => setCategory(val)}
                   className={`whitespace-nowrap text-xs px-3 py-1.5 rounded-full border transition-all font-medium ${
-                    category === cat.value
+                    category === val
                       ? 'bg-violet-500 border-violet-500 text-white'
                       : 'bg-white border-gray-100 text-gray-500'
                   }`}
                 >
-                  {cat.label}
+                  {t.categories[val]}
                 </button>
               ))}
             </div>
@@ -351,13 +345,13 @@ export function GroupFeedPage() {
             </div>
           ) : loadError ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center pt-16 text-gray-400">
-              <p className="text-sm mb-3">Failed to load places.</p>
+              <p className="text-sm mb-3">{t.feed.failedLoad}</p>
               <button onClick={() => loadPlaces(true)} className="text-xs text-violet-500 font-medium hover:text-violet-700">Retry</button>
             </motion.div>
           ) : places.length === 0 ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center pt-16 text-gray-400">
               <div className="text-4xl mb-3">🗺</div>
-              <p className="text-sm">No places yet. Be the first to add one!</p>
+              <p className="text-sm">{t.feed.noPlaces}</p>
             </motion.div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -401,7 +395,7 @@ export function GroupFeedPage() {
                 </div>
               )}
               <div className="p-5">
-                <p className="text-xs font-semibold text-violet-500 uppercase tracking-widest mb-1">Tonight's pick 🎲</p>
+                <p className="text-xs font-semibold text-violet-500 uppercase tracking-widest mb-1">{t.feed.pickedTitle}</p>
                 <h2 dir="auto" className="text-2xl font-bold text-gray-900 mb-1">{pickedPlace.name}</h2>
                 {pickedPlace.cuisine && <p dir="auto" className="text-sm text-gray-400 mb-3">{pickedPlace.cuisine}</p>}
                 {pickedPlace.avg_rating != null && (
@@ -417,7 +411,7 @@ export function GroupFeedPage() {
                     onClick={() => navigate(`/group/${groupId}/place/${pickedPlace.id}`)}
                     className="flex-1 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 transition-colors"
                   >
-                    View place
+                    {t.feed.viewPlace}
                   </button>
                   <button
                     onClick={pickRandom}

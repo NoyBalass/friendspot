@@ -21,6 +21,7 @@ function DancingDots() {
 import { useAuthStore } from '../store/useAuthStore'
 import { getUserGroups, createGroup, joinGroupByCode, updateGroup, deleteGroup, uploadGroupCoverPhoto } from '../lib/groups'
 import { Avatar } from '../components/Avatar'
+import { useT } from '../lib/i18n'
 import type { Group, GroupType } from '../types'
 
 const GROUP_TYPES: { value: GroupType; label: string; emoji: string }[] = [
@@ -37,6 +38,7 @@ const GROUP_TYPES: { value: GroupType; label: string; emoji: string }[] = [
 export function GroupsPage() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
+  const t = useT()
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -190,8 +192,8 @@ export function GroupsPage() {
 
       {/* Header */}
       <div className="sticky top-14 bg-[#fafaf8]/90 backdrop-blur-md z-10 px-5 pt-4 pb-4">
-        <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Your groups</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Places you actually trust</p>
+        <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{t.groups.title}</h1>
+        <p className="text-sm text-gray-400 mt-0.5">{t.groups.subtitle}</p>
       </div>
 
       <div className="px-5">
@@ -211,8 +213,8 @@ export function GroupsPage() {
           </div>
         ) : loadError ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center pt-16 text-gray-400">
-            <p className="text-sm mb-3">Failed to load groups.</p>
-            <button onClick={load} className="text-xs text-violet-500 font-medium hover:text-violet-700">Retry</button>
+            <p className="text-sm mb-3">{t.groups.failedLoad}</p>
+            <button onClick={load} className="text-xs text-violet-500 font-medium hover:text-violet-700">{t.common.retry}</button>
           </motion.div>
         ) : groups.length === 0 ? (
           <motion.div
@@ -221,7 +223,7 @@ export function GroupsPage() {
             className="text-center pt-16 text-gray-400"
           >
             <div className="text-4xl mb-3">🌍</div>
-            <p className="text-sm">No groups yet. Create one or join with an invite link.</p>
+            <p className="text-sm">{t.groups.empty}</p>
           </motion.div>
         ) : (
           <div className="grid gap-3">
@@ -240,7 +242,7 @@ export function GroupsPage() {
                   <div className="w-10 h-10 rounded-xl bg-violet-50 overflow-hidden flex items-center justify-center text-lg shrink-0">
                     {group.cover_photo
                       ? <img src={group.cover_photo} alt={group.name} className="w-full h-full object-cover" />
-                      : GROUP_TYPES.find(t => t.value === group.type)?.emoji ?? '✨'
+                      : GROUP_TYPES.find(gt => gt.value === group.type)?.emoji ?? '✨'
                     }
                   </div>
                   <div className="flex-1 min-w-0">
@@ -261,7 +263,7 @@ export function GroupsPage() {
                       </div>
                     ) : (
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {GROUP_TYPES.find(t => t.value === group.type)?.label ?? 'Mixed'}
+                        {GROUP_TYPES.find(gt => gt.value === group.type)?.label ?? t.groups.mixed}
                       </p>
                     )}
                   </div>
@@ -276,9 +278,9 @@ export function GroupsPage() {
                       className="overflow-hidden mt-2"
                     >
                       <div className="bg-red-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
-                        <p className="text-xs text-red-500 font-medium">Delete this group and all its places?</p>
+                        <p className="text-xs text-red-500 font-medium">{t.groups.deleteGroup}</p>
                         <div className="flex gap-2 shrink-0">
-                          <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null) }} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1">Cancel</button>
+                          <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null) }} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1">{t.common.cancel}</button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id) }}
                             disabled={deleting}
@@ -298,9 +300,9 @@ export function GroupsPage() {
                     className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-500 transition-colors"
                   >
                     {copied === group.id ? (
-                      <><Check size={13} className="text-emerald-500" /> Link copied!</>
+                      <><Check size={13} className="text-emerald-500" /> {t.groups.linkCopied}</>
                     ) : (
-                      <><Share2 size={13} /> Share invite</>
+                      <><Share2 size={13} /> {t.groups.shareInvite}</>
                     )}
                   </button>
                   {group.created_by === user?.id && (
@@ -309,13 +311,13 @@ export function GroupsPage() {
                         onClick={(e) => { e.stopPropagation(); openEditGroup(group) }}
                         className="flex items-center gap-1 text-xs text-gray-300 hover:text-violet-500 transition-colors"
                       >
-                        <Settings size={13} /> Edit
+                        <Settings size={13} /> {t.common.edit}
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(group.id) }}
                         className="flex items-center gap-1 text-xs text-gray-300 hover:text-red-400 transition-colors"
                       >
-                        <Trash2 size={13} /> Delete
+                        <Trash2 size={13} /> {t.common.delete}
                       </button>
                     </div>
                   )}
@@ -331,13 +333,13 @@ export function GroupsPage() {
             onClick={() => setModal('create')}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 active:scale-95 transition-all shadow-sm"
           >
-            <Plus size={16} /> Create group
+            <Plus size={16} /> {t.groups.createGroup}
           </button>
           <button
             onClick={() => setModal('join')}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-50 active:scale-95 transition-all"
           >
-            <Link size={16} /> Join group
+            <Link size={16} /> {t.groups.joinGroup}
           </button>
         </div>
       </div>
@@ -362,7 +364,7 @@ export function GroupsPage() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  {modal === 'create' ? 'Create a group' : 'Join a group'}
+                  {modal === 'create' ? t.groups.createGroup : t.groups.joinGroup}
                 </h2>
                 <button onClick={() => setModal(null)} className="text-gray-400 hover:text-gray-600">
                   <X size={20} />
@@ -400,7 +402,7 @@ export function GroupsPage() {
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) { setCreateCoverFile(f); setCreateCoverPreview(URL.createObjectURL(f)) } }} />
                   <input
                     type="text"
-                    placeholder="Group name"
+                    placeholder={t.groups.groupName}
                     value={name}
                     dir="auto"
                     onChange={(e) => setName(e.target.value)}
@@ -409,14 +411,14 @@ export function GroupsPage() {
                   />
                   <input
                     type="text"
-                    placeholder="Description (optional)"
+                    placeholder={t.groups.descriptionOptional}
                     value={desc}
                     dir="auto"
                     onChange={(e) => setDesc(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300"
                   />
                   <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Group type</p>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t.groups.groupType}</p>
                     <div className="flex flex-wrap gap-2">
                       {GROUP_TYPES.map((t) => (
                         <button
@@ -446,7 +448,7 @@ export function GroupsPage() {
                 <form onSubmit={handleJoin} className="flex flex-col gap-4">
                   <input
                     type="text"
-                    placeholder="Invite code or paste link"
+                    placeholder={t.groups.enterCode}
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     required
@@ -485,7 +487,7 @@ export function GroupsPage() {
               className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-xl"
             >
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-semibold text-gray-900">Edit group</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{t.groups.editGroup}</h2>
                 <button onClick={() => setEditingGroup(null)} className="text-gray-400"><X size={20} /></button>
               </div>
               <form onSubmit={saveEditGroup} className="flex flex-col gap-4">
@@ -532,7 +534,7 @@ export function GroupsPage() {
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300"
                 />
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Group type</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t.groups.groupType}</p>
                   <div className="flex flex-wrap gap-2">
                     {GROUP_TYPES.map((t) => (
                       <button

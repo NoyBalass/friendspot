@@ -17,6 +17,7 @@ import { TopBar } from './components/TopBar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PwaInstallBanner } from './components/PwaInstallBanner'
 import { registerServiceWorker } from './lib/notifications'
+import { useLangStore, applyDir } from './lib/i18n'
 
 function AnimatedPage({ children }: { children: React.ReactNode }) {
   return (
@@ -80,7 +81,10 @@ async function processPendingInvite(userId: string) {
 
 export default function App() {
   const { setUser, setSession } = useAuthStore()
+  const { lang } = useLangStore()
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => { applyDir(lang) }, [lang])
 
   useEffect(() => {
     registerServiceWorker()

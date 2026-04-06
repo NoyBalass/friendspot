@@ -2,47 +2,51 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { signIn, signUp } from '../lib/auth'
 import { Eye, EyeOff, ChevronRight } from 'lucide-react'
+import { useLangStore, useT, type Lang } from '../lib/i18n'
 
-const SLIDES = [
-  {
-    emoji: '🍽',
-    title: 'The place list your\nfriends actually update',
-    subtitle: 'No influencers. No algorithms. Just honest picks from people whose taste you trust.',
-    bg: 'from-violet-500 to-violet-700',
-  },
-  {
-    emoji: '👥',
-    title: 'Private groups,\nnot public feeds',
-    subtitle: 'Create a group with your crew and share spots only with them. What happens in the group stays in the group.',
-    bg: 'from-fuchsia-500 to-violet-600',
-  },
-  {
-    emoji: '⭐',
-    title: 'Real reviews from\npeople you know',
-    subtitle: "Rate and review places you've actually visited. Your friends will finally know if it's worth the hype.",
-    bg: 'from-amber-400 to-orange-500',
-  },
-  {
-    emoji: '🔖',
-    title: 'Plan together,\nnot alone',
-    subtitle: 'Save places you want to try, mark where you\'ve been, and see who wants to go where.',
-    bg: 'from-emerald-400 to-teal-600',
-  },
+const LANGS: { value: Lang; flag: string; label: string }[] = [
+  { value: 'en', flag: '🇬🇧', label: 'English' },
+  { value: 'he', flag: '🇮🇱', label: 'עברית' },
 ]
 
+function LangPicker() {
+  const { lang, setLang } = useLangStore()
+  return (
+    <div className="flex gap-2 justify-center">
+      {LANGS.map(l => (
+        <button
+          key={l.value}
+          onClick={() => setLang(l.value)}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+            lang === l.value
+              ? 'bg-white text-violet-700 shadow-md'
+              : 'bg-white/20 text-white/80 hover:bg-white/30'
+          }`}
+        >
+          <span>{l.flag}</span>
+          <span>{l.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function IntroSlides({ onDone }: { onDone: () => void }) {
+  const t = useT()
+  const { lang } = useLangStore()
+  const { slides, skip, next, getStarted } = t.intro
   const [index, setIndex] = useState(0)
   const [dir, setDir] = useState(1)
-  const slide = SLIDES[index]
-  const isLast = index === SLIDES.length - 1
+  const slide = slides[index]
+  const isLast = index === slides.length - 1
 
-  function next() {
+  function advance() {
     if (isLast) { onDone(); return }
     setDir(1)
     setIndex(i => i + 1)
   }
 
-  function prev() {
+  function goBack() {
     if (index === 0) return
     setDir(-1)
     setIndex(i => i - 1)
@@ -50,12 +54,22 @@ function IntroSlides({ onDone }: { onDone: () => void }) {
 
   return (
     <div className={`min-h-svh flex flex-col bg-gradient-to-br ${slide.bg} transition-all duration-500`}>
-      {/* Skip */}
-      <div className="flex justify-end px-6 pt-12">
+      {/* Top: skip + language (only on first slide) */}
+      <div className="flex items-start justify-between px-6 pt-12">
+        <div className="w-16">
+          {index === 0 && <LangPicker />}
+        </div>
         <button onClick={onDone} className="text-white/60 text-sm font-medium">
-          Skip
+          {skip}
         </button>
       </div>
+
+      {/* Language picker centered below top on slide 0 */}
+      {index === 0 && (
+        <div className="px-6 pt-4 flex justify-center">
+          <LangPicker />
+        </div>
+      )}
 
       {/* Slide content */}
       <div className="flex-1 flex flex-col items-center justify-center px-8 pb-8">
@@ -82,9 +96,8 @@ function IntroSlides({ onDone }: { onDone: () => void }) {
 
       {/* Bottom controls */}
       <div className="px-8 pb-12 flex flex-col items-center gap-6">
-        {/* Dots */}
         <div className="flex gap-2">
-          {SLIDES.map((_, i) => (
+          {slides.map((_, i) => (
             <button
               key={i}
               onClick={() => { setDir(i > index ? 1 : -1); setIndex(i) }}
@@ -95,22 +108,21 @@ function IntroSlides({ onDone }: { onDone: () => void }) {
           ))}
         </div>
 
-        {/* CTA */}
         <div className="flex w-full gap-3">
           {index > 0 && (
             <button
-              onClick={prev}
+              onClick={goBack}
               className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-white"
             >
-              <ChevronRight size={20} className="rotate-180" />
+              <ChevronRight size={20} className={lang === 'he' ? '' : 'rotate-180'} />
             </button>
           )}
           <button
-            onClick={next}
+            onClick={advance}
             className="flex-1 h-12 rounded-2xl bg-white text-violet-700 font-semibold text-base flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg"
           >
-            {isLast ? 'Get started' : 'Next'}
-            {!isLast && <ChevronRight size={18} />}
+            {isLast ? getStarted : next}
+            {!isLast && <ChevronRight size={18} className={lang === 'he' ? 'rotate-180' : ''} />}
           </button>
         </div>
       </div>
@@ -119,6 +131,8 @@ function IntroSlides({ onDone }: { onDone: () => void }) {
 }
 
 function AuthForm() {
+  const t = useT()
+  const { setLang, lang } = useLangStore()
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -152,11 +166,27 @@ function AuthForm() {
     >
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-violet-600 tracking-tight mb-1">friendspots</h1>
-        <p className="text-sm text-gray-400">Recommendations from people you trust</p>
+        <p className="text-sm text-gray-400">{t.auth.tagline}</p>
+      </div>
+
+      {/* Lang toggle on auth screen too */}
+      <div className="flex gap-2 mb-6">
+        {LANGS.map(l => (
+          <button
+            key={l.value}
+            onClick={() => setLang(l.value)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+              lang === l.value
+                ? 'bg-violet-500 text-white border-violet-500'
+                : 'bg-white text-gray-500 border-gray-200 hover:border-violet-200'
+            }`}
+          >
+            {l.flag} {l.label}
+          </button>
+        ))}
       </div>
 
       <div className="w-full max-w-sm bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
-        {/* Toggle */}
         <div className="flex bg-gray-50 rounded-2xl p-1 mb-7">
           {(['signin', 'signup'] as const).map((m) => (
             <button
@@ -166,7 +196,7 @@ function AuthForm() {
                 mode === m ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400'
               }`}
             >
-              {m === 'signin' ? 'Sign in' : 'Sign up'}
+              {m === 'signin' ? t.auth.signIn : t.auth.signUp}
             </button>
           ))}
         </div>
@@ -183,7 +213,7 @@ function AuthForm() {
               >
                 <input
                   type="text"
-                  placeholder="Nickname"
+                  placeholder={t.auth.nickname}
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   required
@@ -195,7 +225,7 @@ function AuthForm() {
 
           <input
             type="email"
-            placeholder="Email"
+            placeholder={t.auth.email}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -205,7 +235,7 @@ function AuthForm() {
           <div className="relative">
             <input
               type={showPw ? 'text' : 'password'}
-              placeholder="Password"
+              placeholder={t.auth.password}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -231,7 +261,7 @@ function AuthForm() {
             disabled={loading}
             className="w-full py-3 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 active:scale-95 transition-all disabled:opacity-50 mt-1"
           >
-            {loading ? '...' : mode === 'signin' ? 'Sign in' : 'Create account'}
+            {loading ? '…' : mode === 'signin' ? t.auth.signIn : t.auth.createAccount}
           </button>
         </form>
       </div>

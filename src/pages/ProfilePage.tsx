@@ -6,6 +6,12 @@ import { useAuthStore } from '../store/useAuthStore'
 import { signOut } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { resizeImage } from '../lib/imageUtils'
+import { useT, useLangStore, type Lang } from '../lib/i18n'
+
+const LANGS: { value: Lang; flag: string; label: string }[] = [
+  { value: 'en', flag: '🇬🇧', label: 'English' },
+  { value: 'he', flag: '🇮🇱', label: 'עברית' },
+]
 import { getUserGroups, createGroup, updateGroup, deleteGroup } from '../lib/groups'
 import { getPermissionState, requestAndSubscribe, unsubscribe } from '../lib/notifications'
 import { Avatar } from '../components/Avatar'
@@ -40,6 +46,8 @@ type DrawerType = 'places' | 'reviews' | 'wishlist' | null
 export function ProfilePage() {
   const { user, setUser } = useAuthStore()
   const navigate = useNavigate()
+  const t = useT()
+  const { lang, setLang } = useLangStore()
   const [stats, setStats] = useState({ reviews: 0, places: 0 })
   const [groups, setGroups] = useState<Group[]>([])
 
@@ -361,19 +369,19 @@ export function ProfilePage() {
           <div className="flex gap-3 justify-center mt-5 pt-5 border-t border-gray-50">
             <button onClick={() => openDrawer('places')} className="text-center group flex-1">
               <p className="text-2xl font-bold text-gray-900 group-hover:text-violet-600 transition-colors">{stats.places}</p>
-              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors flex items-center justify-center gap-0.5"><MapPin size={10} /> Places</p>
+              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors flex items-center justify-center gap-0.5"><MapPin size={10} /> {t.profile.places}</p>
             </button>
             <div className="w-px bg-gray-100" />
             <button onClick={() => openDrawer('reviews')} className="text-center group flex-1">
               <p className="text-2xl font-bold text-gray-900 group-hover:text-violet-600 transition-colors">{stats.reviews}</p>
-              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors">Reviews</p>
+              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors">{t.profile.reviews}</p>
             </button>
             <div className="w-px bg-gray-100" />
             <button onClick={() => openDrawer('wishlist')} className="text-center group flex-1">
               <div className="flex justify-center">
                 <Bookmark size={22} className="text-gray-900 group-hover:text-violet-600 transition-colors" />
               </div>
-              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors">Wishlist</p>
+              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors">{t.profile.wishlist}</p>
             </button>
           </div>
         </motion.div>
@@ -386,7 +394,7 @@ export function ProfilePage() {
           className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden"
         >
           <div className="flex items-center justify-between px-5 pt-4 pb-2">
-            <p className="text-sm font-semibold text-gray-700">Your groups</p>
+            <p className="text-sm font-semibold text-gray-700">{t.profile.yourGroups}</p>
             <button
               onClick={() => setShowCreate(true)}
               className="flex items-center gap-1 text-xs text-violet-500 font-medium hover:text-violet-700 transition-colors"
@@ -477,12 +485,37 @@ export function ProfilePage() {
             {notifLoading
               ? '...'
               : notifPermission === 'granted'
-              ? 'Turn off notifications'
+              ? t.profile.notificationsOff
               : notifPermission === 'denied'
-              ? 'Notifications blocked (change in browser settings)'
-              : 'Turn on notifications'}
+              ? t.profile.notificationsBlocked
+              : t.profile.notifications}
           </motion.button>
         )}
+
+        {/* Language picker */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.13 }}
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3"
+        >
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2.5">{t.profile.language}</p>
+          <div className="flex gap-2">
+            {LANGS.map(l => (
+              <button
+                key={l.value}
+                onClick={() => setLang(l.value)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  lang === l.value
+                    ? 'bg-violet-500 text-white border-violet-500'
+                    : 'bg-gray-50 text-gray-500 border-gray-100 hover:border-violet-200'
+                }`}
+              >
+                {l.flag} {l.label}
+              </button>
+            ))}
+          </div>
+        </motion.div>
 
         {/* Share app */}
         <motion.button
@@ -500,7 +533,7 @@ export function ProfilePage() {
           }}
           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-violet-200 text-violet-600 bg-violet-50 text-sm font-medium hover:bg-violet-100 active:scale-95 transition-all"
         >
-          <Share2 size={16} /> Share app with friends
+          <Share2 size={16} /> {t.profile.shareApp}
         </motion.button>
 
         {/* Sign out */}
@@ -511,7 +544,7 @@ export function ProfilePage() {
           onClick={signOut}
           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-gray-200 text-gray-500 text-sm font-medium hover:bg-gray-50 active:scale-95 transition-all"
         >
-          <LogOut size={16} /> Sign out
+          <LogOut size={16} /> {t.profile.signOut}
         </motion.button>
       </div>
 
