@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, Plus, Search, Shuffle, Star, MapPin, MessageCircle } from 'lucide-react'
@@ -10,6 +10,8 @@ import { PlaceCard } from '../components/PlaceCard'
 import { Avatar } from '../components/Avatar'
 import { CommentsSheet } from '../components/CommentsSheet'
 import { useAuthStore } from '../store/useAuthStore'
+import { usePullToRefresh } from '../hooks/usePullToRefresh'
+import { supabase } from '../lib/supabase'
 import type { Place, Category } from '../types'
 
 const CATEGORIES: { value: Category | 'all'; label: string }[] = [
@@ -43,24 +45,40 @@ function ActivityFeed({ groupId }: { groupId: string }) {
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [sheet, setSheet] = useState<CommentSheetState>(null)
 
-  useEffect(() => {
-    getGroupActivity(groupId)
-      .then(async (data) => {
-        setItems(data)
-        // fetch comment counts per target type
-        const placeIds = data.filter(i => i.commentTargetType === 'place').map(i => i.commentTargetId)
-        const reviewIds = data.filter(i => i.commentTargetType === 'review').map(i => i.commentTargetId)
-        const checkinIds = data.filter(i => i.commentTargetType === 'checkin').map(i => i.commentTargetId)
-        const [pc, rc, cc] = await Promise.all([
-          getCommentCounts('place', placeIds),
-          getCommentCounts('review', reviewIds),
-          getCommentCounts('checkin', checkinIds),
-        ])
-        setCounts({ ...pc, ...rc, ...cc })
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+  const fetchActivity = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    try {
+      const data = await getGroupActivity(groupId)
+      setItems(data)
+      const placeIds = data.filter(i => i.commentTargetType === 'place').map(i => i.commentTargetId)
+      const reviewIds = data.filter(i => i.commentTargetType === 'review').map(i => i.commentTargetId)
+      const checkinIds = data.filter(i => i.commentTargetType === 'checkin').map(i => i.commentTargetId)
+      const [pc, rc, cc] = await Promise.all([
+        getCommentCounts('place', placeIds),
+        getCommentCounts('review', reviewIds),
+        getCommentCounts('checkin', checkinIds),
+      ])
+      setCounts({ ...pc, ...rc, ...cc })
+    } catch {}
+    if (!silent) setLoading(false)
   }, [groupId])
+
+  useEffect(() => {
+    fetchActivity()
+
+    // Real-time: refresh on new places, reviews, checkins in this group
+    const channel = supabase
+      .channel(`activity:${groupId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'places', filter: `group_id=eq.${groupId}` },
+        () => fetchActivity(true))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reviews' },
+        () => fetchActivity(true))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'place_checkins' },
+        () => fetchActivity(true))
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [groupId, fetchActivity])
 
   function openSheet(e: React.MouseEvent, item: ActivityItem) {
     e.stopPropagation()
@@ -80,8 +98,20 @@ function ActivityFeed({ groupId }: { groupId: string }) {
   }
 
   if (loading) return (
-    <div className="flex justify-center pt-16">
-      <div className="w-6 h-6 rounded-full border-2 border-violet-200 border-t-violet-500 animate-spin" />
+    <div className="flex flex-col gap-3 px-5 mt-2 pb-24">
+      {[1,2,3].map(i => (
+        <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-pulse flex">
+          <div className="w-20 bg-gray-100 shrink-0 h-24" />
+          <div className="flex-1 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-gray-100" />
+              <div className="h-2.5 bg-gray-100 rounded-full w-20" />
+            </div>
+            <div className="h-3 bg-gray-100 rounded-full w-3/4" />
+            <div className="h-2.5 bg-gray-100 rounded-full w-1/2" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 
@@ -187,6 +217,10 @@ export function GroupFeedPage() {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'places' | 'activity'>('places')
   const [pickedPlace, setPickedPlace] = useState<Place | null>(null)
+
+  const { refreshing } = usePullToRefresh(async () => {
+    await Promise.all([loadGroup(), loadPlaces(false)])
+  })
 
   useEffect(() => {
     if (groupId) {
@@ -295,14 +329,25 @@ export function GroupFeedPage() {
         )}
       </div>
 
+      {/* Pull-to-refresh indicator */}
+      <AnimatePresence>
+        {refreshing && (
+          <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} className="flex justify-center pb-2">
+            <div className="w-5 h-5 rounded-full border-2 border-violet-200 border-t-violet-500 animate-spin" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Tab content */}
       {tab === 'activity' ? (
         <ActivityFeed groupId={groupId!} />
       ) : (
         <div className="px-5 mt-2">
           {loading ? (
-            <div className="flex justify-center pt-16">
-              <div className="w-6 h-6 rounded-full border-2 border-violet-200 border-t-violet-500 animate-spin" />
+            <div className="grid grid-cols-2 gap-3">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="rounded-2xl bg-gray-100 animate-pulse" style={{ aspectRatio: '3/4' }} />
+              ))}
             </div>
           ) : loadError ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center pt-16 text-gray-400">

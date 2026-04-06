@@ -50,6 +50,8 @@ export interface Place {
   cover_photo?: string
   added_by_user?: User
   review_users?: User[]
+  want_count?: number
+  been_count?: number
 }
 
 export interface Review {

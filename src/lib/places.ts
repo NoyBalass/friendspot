@@ -26,7 +26,8 @@ async function fetchAndCachePlaces(key: string, groupId: string, category?: Cate
     .select(`
       *,
       added_by_user:users!places_added_by_fkey ( id, nickname, avatar_url ),
-      reviews ( rating, user_id, user:users ( id, nickname, avatar_url ), photos:review_photos ( photo_url ) )
+      reviews ( rating, user_id, user:users ( id, nickname, avatar_url ), photos:review_photos ( photo_url ) ),
+      checkins:place_checkins ( user_id, status )
     `)
     .eq('group_id', groupId)
     .order('created_at', { ascending: false })
@@ -36,25 +37,66 @@ async function fetchAndCachePlaces(key: string, groupId: string, category?: Cate
   const { data, error } = await query
   if (error) throw error
 
-  const result = (data ?? []).map((p: any) => {
-    const firstPhoto = p.reviews?.flatMap((r: any) => r.photos ?? []).find((ph: any) => ph.photo_url)
-    return {
-      ...p,
-      avg_rating: p.reviews?.length
-        ? p.reviews.reduce((s: number, r: any) => s + r.rating, 0) / p.reviews.length
-        : null,
-      review_count: p.reviews?.length ?? 0,
-      cover_photo: p.cover_photo ?? firstPhoto?.photo_url ?? null,
-      review_users: (p.reviews ?? [])
-        .map((r: any) => r.user)
-        .filter((u: any) => u != null)
-        .filter((u: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === u.id) === i)
-        .slice(0, 4),
-    }
-  })
+  const result = (data ?? []).map((p: any) => normalizePlaceRow(p))
 
   cacheSet(key, result)
   return result
+}
+
+function normalizePlaceRow(p: any) {
+  const firstPhoto = p.reviews?.flatMap((r: any) => r.photos ?? []).find((ph: any) => ph.photo_url)
+  return {
+    ...p,
+    avg_rating: p.reviews?.length
+      ? p.reviews.reduce((s: number, r: any) => s + r.rating, 0) / p.reviews.length
+      : null,
+    review_count: p.reviews?.length ?? 0,
+    cover_photo: p.cover_photo ?? firstPhoto?.photo_url ?? null,
+    review_users: (p.reviews ?? [])
+      .map((r: any) => r.user)
+      .filter((u: any) => u != null)
+      .filter((u: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === u.id) === i)
+      .slice(0, 4),
+    want_count: (p.checkins ?? []).filter((c: any) => c.status === 'want').length,
+    been_count: (p.checkins ?? []).filter((c: any) => c.status === 'been').length,
+  }
+}
+
+export async function searchAllPlaces(userId: string, query: string) {
+  if (!query.trim()) return []
+  const q = query.toLowerCase()
+
+  // Get all group IDs the user belongs to
+  const { data: memberships } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('user_id', userId)
+  const groupIds = (memberships ?? []).map((m: any) => m.group_id)
+  if (!groupIds.length) return []
+
+  const { data, error } = await supabase
+    .from('places')
+    .select(`
+      *,
+      added_by_user:users!places_added_by_fkey ( id, nickname, avatar_url ),
+      reviews ( rating, user_id, user:users ( id, nickname, avatar_url ), photos:review_photos ( photo_url ) ),
+      checkins:place_checkins ( user_id, status ),
+      groups ( name )
+    `)
+    .in('group_id', groupIds)
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (error) throw error
+
+  return (data ?? [])
+    .map((p: any) => ({ ...normalizePlaceRow(p), group_name: p.groups?.name ?? '' }))
+    .filter((p: any) =>
+      p.name?.toLowerCase().includes(q) ||
+      p.cuisine?.toLowerCase().includes(q) ||
+      p.group_name?.toLowerCase().includes(q)
+    )
+    .slice(0, 40)
 }
 
 export async function getPlaceById(placeId: string) {

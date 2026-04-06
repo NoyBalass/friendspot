@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from './lib/supabase'
 import { getProfile } from './lib/auth'
 import { joinGroupByCode } from './lib/groups'
@@ -13,26 +14,45 @@ import { ProfilePage } from './pages/ProfilePage'
 import { JoinPage } from './pages/JoinPage'
 import { AdminBackfillPage } from './pages/AdminBackfillPage'
 import { TopBar } from './components/TopBar'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { PwaInstallBanner } from './components/PwaInstallBanner'
 import { registerServiceWorker } from './lib/notifications'
+
+function AnimatedPage({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0, transition: { duration: 0.18, ease: 'easeOut' } }}
+      exit={{ opacity: 0, y: -6, transition: { duration: 0.12, ease: 'easeIn' } }}
+    >
+      {children}
+    </motion.div>
+  )
+}
 
 function AppRoutes() {
   const { session } = useAuthStore()
+  const location = useLocation()
+
   if (!session) return <OnboardingPage />
   return (
     <>
       <TopBar />
       <div className="pt-14">
-        <Routes>
-          <Route path="/" element={<GroupsPage />} />
-          <Route path="/group/:groupId" element={<GroupFeedPage />} />
-          <Route path="/group/:groupId/place/:placeId" element={<PlaceDetailPage />} />
-          <Route path="/group/:groupId/add" element={<AddPlacePage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/join/:code" element={<JoinPage />} />
-          <Route path="/admin/backfill" element={<AdminBackfillPage />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/" element={<AnimatedPage><GroupsPage /></AnimatedPage>} />
+            <Route path="/group/:groupId" element={<AnimatedPage><GroupFeedPage /></AnimatedPage>} />
+            <Route path="/group/:groupId/place/:placeId" element={<AnimatedPage><PlaceDetailPage /></AnimatedPage>} />
+            <Route path="/group/:groupId/add" element={<AnimatedPage><AddPlacePage /></AnimatedPage>} />
+            <Route path="/profile" element={<AnimatedPage><ProfilePage /></AnimatedPage>} />
+            <Route path="/join/:code" element={<AnimatedPage><JoinPage /></AnimatedPage>} />
+            <Route path="/admin/backfill" element={<AnimatedPage><AdminBackfillPage /></AnimatedPage>} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </AnimatePresence>
       </div>
+      <PwaInstallBanner />
     </>
   )
 }
@@ -41,7 +61,6 @@ async function loadUserProfile(userId: string, email: string, nickname?: string)
   try {
     return await getProfile(userId)
   } catch {
-    // Profile might not exist yet (trigger delay) — create it manually
     const { data } = await supabase
       .from('users')
       .upsert({ id: userId, email, nickname: nickname ?? email.split('@')[0] }, { onConflict: 'id' })
@@ -109,8 +128,10 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

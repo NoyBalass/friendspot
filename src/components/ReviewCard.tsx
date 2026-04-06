@@ -7,6 +7,7 @@ import { Avatar } from './Avatar'
 import { uploadReviewPhoto, deleteReview } from '../lib/places'
 import { getCommentCounts } from '../lib/comments'
 import { CommentsSheet } from './CommentsSheet'
+import { Lightbox } from './Lightbox'
 
 interface Props {
   review: Review
@@ -26,6 +27,7 @@ export function ReviewCard({ review, placeId, index = 0, currentUserId, onPhotoA
   const [deleting, setDeleting] = useState(false)
   const [replyCount, setReplyCount] = useState(0)
   const [showReplies, setShowReplies] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   useEffect(() => {
     getCommentCounts('review', [review.id]).then(c => setReplyCount(c[review.id] ?? 0))
@@ -115,16 +117,25 @@ export function ReviewCard({ review, placeId, index = 0, currentUserId, onPhotoA
         )}
 
         {review.photos && review.photos.length > 0 && (
-          <div className="mt-3 flex gap-1.5 overflow-x-auto scrollbar-hide">
-            {review.photos.map((photo) => (
-              <img
-                key={photo.id}
-                src={photo.photo_url}
-                alt="review photo"
-                className="w-16 h-16 rounded-lg object-cover shrink-0"
-              />
-            ))}
-          </div>
+          <>
+            <Lightbox
+              images={review.photos.map(p => p.photo_url)}
+              index={lightboxIndex}
+              onClose={() => setLightboxIndex(null)}
+              onChange={setLightboxIndex}
+            />
+            <div className="mt-3 flex gap-1.5 overflow-x-auto scrollbar-hide">
+              {review.photos.map((photo, i) => (
+                <img
+                  key={photo.id}
+                  src={photo.photo_url}
+                  alt="review photo"
+                  className="w-16 h-16 rounded-lg object-cover shrink-0 cursor-zoom-in active:scale-95 transition-transform"
+                  onClick={() => setLightboxIndex(i)}
+                />
+              ))}
+            </div>
+          </>
         )}
 
         {/* Footer: add photo + reply */}

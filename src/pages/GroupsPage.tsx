@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Link, X, Copy, Check, Settings, Trash2, ImagePlus, Camera } from 'lucide-react'
+import { Plus, Link, X, Check, Settings, Trash2, ImagePlus, Camera, Share2 } from 'lucide-react'
+import { usePullToRefresh } from '../hooks/usePullToRefresh'
 
 function DancingDots() {
   return (
@@ -156,15 +157,37 @@ export function GroupsPage() {
     }
   }
 
-  function copyInvite(group: Group) {
+  async function shareInvite(group: Group) {
     const url = `${window.location.origin}/join/${group.invite_code}`
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Join ${group.name} on friendspots`, url })
+        return
+      } catch {}
+    }
     navigator.clipboard.writeText(url)
     setCopied(group.id)
     setTimeout(() => setCopied(''), 2000)
   }
 
+  const { refreshing } = usePullToRefresh(load)
+
   return (
     <div className="min-h-svh bg-[#fafaf8] pb-10">
+      {/* Pull-to-refresh indicator */}
+      <AnimatePresence>
+        {refreshing && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="flex justify-center pt-3 pb-1"
+          >
+            <div className="w-5 h-5 rounded-full border-2 border-violet-200 border-t-violet-500 animate-spin" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="sticky top-14 bg-[#fafaf8]/90 backdrop-blur-md z-10 px-5 pt-4 pb-4">
         <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Your groups</h1>
@@ -173,8 +196,18 @@ export function GroupsPage() {
 
       <div className="px-5">
         {loading ? (
-          <div className="flex justify-center pt-20">
-            <div className="w-6 h-6 rounded-full border-2 border-violet-200 border-t-violet-500 animate-spin" />
+          <div className="grid gap-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gray-100 shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3.5 bg-gray-100 rounded-full w-1/2" />
+                    <div className="h-2.5 bg-gray-100 rounded-full w-1/3" />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : loadError ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center pt-16 text-gray-400">
@@ -261,13 +294,13 @@ export function GroupsPage() {
 
                 <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between">
                   <button
-                    onClick={() => copyInvite(group)}
+                    onClick={() => shareInvite(group)}
                     className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-500 transition-colors"
                   >
                     {copied === group.id ? (
                       <><Check size={13} className="text-emerald-500" /> Link copied!</>
                     ) : (
-                      <><Copy size={13} /> Copy invite link</>
+                      <><Share2 size={13} /> Share invite</>
                     )}
                   </button>
                   {group.created_by === user?.id && (

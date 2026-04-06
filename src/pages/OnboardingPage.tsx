@@ -35,11 +35,29 @@ export function OnboardingPage() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-10"
+        className="text-center mb-6"
       >
-        <div className="text-5xl mb-3">🍽</div>
-        <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Friendspot</h1>
-        <p className="text-sm text-gray-400 mt-1">Recommendations from people you trust</p>
+        <h1 className="text-3xl font-bold text-violet-600 tracking-tight mb-1">friendspots</h1>
+        <p className="text-sm text-gray-400">Recommendations from people you trust</p>
+      </motion.div>
+
+      {/* Feature highlights */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="w-full max-w-sm mb-6 grid grid-cols-3 gap-2"
+      >
+        {[
+          { emoji: '👥', label: 'Private groups' },
+          { emoji: '📍', label: 'Save places' },
+          { emoji: '⭐', label: 'Honest reviews' },
+        ].map(f => (
+          <div key={f.label} className="bg-white rounded-2xl border border-gray-100 p-3 text-center shadow-sm">
+            <div className="text-2xl mb-1">{f.emoji}</div>
+            <p className="text-xs text-gray-500 font-medium">{f.label}</p>
+          </div>
+        ))}
       </motion.div>
 
       {/* Card */}

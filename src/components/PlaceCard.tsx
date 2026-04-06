@@ -99,17 +99,19 @@ export function PlaceCard({ place, groupId, currentUserId, onDeleted }: Props) {
           <p dir="auto" className="text-white/60 text-xs mb-1.5 truncate">{place.cuisine}</p>
         )}
         <div className="flex items-center justify-between">
-          {place.avg_rating != null ? (
-            <div className="flex items-center gap-1">
-              <Star size={11} className="text-amber-400 fill-amber-400" />
-              <span className="text-white/90 text-xs font-medium">{place.avg_rating.toFixed(1)}</span>
-              {place.review_count != null && place.review_count > 0 && (
-                <span className="text-white/50 text-xs">({place.review_count})</span>
-              )}
-            </div>
-          ) : (
-            <span className="text-white/40 text-xs">No reviews</span>
-          )}
+          <div className="flex items-center gap-2">
+            {place.avg_rating != null ? (
+              <div className="flex items-center gap-1">
+                <Star size={11} className="text-amber-400 fill-amber-400" />
+                <span className="text-white/90 text-xs font-medium">{place.avg_rating.toFixed(1)}</span>
+              </div>
+            ) : (
+              <span className="text-white/40 text-xs">No reviews</span>
+            )}
+            {(place.want_count ?? 0) > 0 && (
+              <span className="text-white/60 text-xs">🔖{place.want_count}</span>
+            )}
+          </div>
           {place.added_by_user && (
             <Avatar nickname={place.added_by_user.nickname} src={place.added_by_user.avatar_url} size={20} />
           )}

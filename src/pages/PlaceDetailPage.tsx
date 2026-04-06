@@ -7,6 +7,7 @@ import { getCheckin, setCheckin, getCheckinCounts, type CheckinStatus } from '..
 import { StarRating } from '../components/StarRating'
 import { ReviewCard } from '../components/ReviewCard'
 import { CategoryBadge } from '../components/CategoryBadge'
+import { Lightbox } from '../components/Lightbox'
 import { useAuthStore } from '../store/useAuthStore'
 import type { Place, Review } from '../types'
 
@@ -51,6 +52,8 @@ export function PlaceDetailPage() {
   const reviewCameraRef = useRef<HTMLInputElement>(null)
   // Google Places auto-fetched links
   const [googleLinks, setGoogleLinks] = useState<{ website?: string; instagram?: string; phone?: string } | null>(null)
+  const [lightboxImages, setLightboxImages] = useState<string[]>([])
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (placeId && user) load()
@@ -272,12 +275,36 @@ export function PlaceDetailPage() {
     } catch { return null }
   })()
 
+  // Collect all lightbox images: cover + review photos
+  const allPhotos = [
+    ...(place.cover_photo ? [place.cover_photo] : []),
+    ...reviews.flatMap(r => (r.photos ?? []).map((p: any) => p.photo_url)),
+  ]
+
+  function openLightbox(src: string) {
+    const idx = allPhotos.indexOf(src)
+    setLightboxImages(allPhotos)
+    setLightboxIndex(idx >= 0 ? idx : 0)
+  }
+
   return (
     <div className="min-h-svh bg-[#fafaf8] pb-10">
+      <Lightbox
+        images={lightboxImages}
+        index={lightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+        onChange={setLightboxIndex}
+      />
+
       {/* Cover */}
       <div className="relative h-28 bg-gray-100 overflow-hidden">
         {place.cover_photo ? (
-          <img src={place.cover_photo} alt={place.name} className="w-full h-full object-cover" />
+          <img
+            src={place.cover_photo}
+            alt={place.name}
+            className="w-full h-full object-cover cursor-zoom-in"
+            onClick={() => openLightbox(place.cover_photo!)}
+          />
         ) : mapsQuery ? (
           <iframe
             title="map"
