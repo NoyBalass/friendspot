@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LogOut, Pencil, X, Plus, ChevronRight, Star, MapPin, Check, Settings, Trash2, Bell, BellOff, Camera, ImagePlus, Bookmark } from 'lucide-react'
+import { LogOut, Pencil, X, Plus, ChevronRight, Star, MapPin, Check, Settings, Trash2, Bell, BellOff, Camera, ImagePlus, Bookmark, Share2 } from 'lucide-react'
 import { useAuthStore } from '../store/useAuthStore'
 import { signOut } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -483,6 +483,25 @@ export function ProfilePage() {
               : 'Turn on notifications'}
           </motion.button>
         )}
+
+        {/* Share app */}
+        <motion.button
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.14 }}
+          onClick={async () => {
+            const text = 'Check out friendspots — restaurant & bar recommendations from people you actually trust 🍽'
+            const url = window.location.origin
+            if (navigator.share) {
+              try { await navigator.share({ title: 'friendspots', text, url }); return } catch {}
+            }
+            await navigator.clipboard.writeText(`${text}\n${url}`)
+            alert('Link copied!')
+          }}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-violet-200 text-violet-600 bg-violet-50 text-sm font-medium hover:bg-violet-100 active:scale-95 transition-all"
+        >
+          <Share2 size={16} /> Share app with friends
+        </motion.button>
 
         {/* Sign out */}
         <motion.button
