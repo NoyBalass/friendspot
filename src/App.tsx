@@ -11,23 +11,28 @@ import { PlaceDetailPage } from './pages/PlaceDetailPage'
 import { AddPlacePage } from './pages/AddPlacePage'
 import { ProfilePage } from './pages/ProfilePage'
 import { JoinPage } from './pages/JoinPage'
-import { BottomNav } from './components/BottomNav'
+import { AdminBackfillPage } from './pages/AdminBackfillPage'
+import { TopBar } from './components/TopBar'
+import { registerServiceWorker } from './lib/notifications'
 
 function AppRoutes() {
   const { session } = useAuthStore()
   if (!session) return <OnboardingPage />
   return (
     <>
-      <Routes>
-        <Route path="/" element={<GroupsPage />} />
-        <Route path="/group/:groupId" element={<GroupFeedPage />} />
-        <Route path="/group/:groupId/place/:placeId" element={<PlaceDetailPage />} />
-        <Route path="/group/:groupId/add" element={<AddPlacePage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/join/:code" element={<JoinPage />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-      <BottomNav />
+      <TopBar />
+      <div className="pt-14">
+        <Routes>
+          <Route path="/" element={<GroupsPage />} />
+          <Route path="/group/:groupId" element={<GroupFeedPage />} />
+          <Route path="/group/:groupId/place/:placeId" element={<PlaceDetailPage />} />
+          <Route path="/group/:groupId/add" element={<AddPlacePage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/join/:code" element={<JoinPage />} />
+          <Route path="/admin/backfill" element={<AdminBackfillPage />} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </div>
     </>
   )
 }
@@ -59,6 +64,8 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    registerServiceWorker()
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session)
       if (session?.user) {

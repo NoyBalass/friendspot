@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LogOut, Pencil, X, Plus, ChevronRight, Star, MapPin, Check, Settings, Trash2 } from 'lucide-react'
+import { LogOut, Pencil, X, Plus, ChevronRight, Star, MapPin, Check, Settings, Trash2, Bell, BellOff, Camera, ImagePlus, Bookmark } from 'lucide-react'
 import { useAuthStore } from '../store/useAuthStore'
 import { signOut } from '../lib/auth'
 import { supabase } from '../lib/supabase'
+import { resizeImage } from '../lib/imageUtils'
 import { getUserGroups, createGroup, updateGroup, deleteGroup } from '../lib/groups'
+import { getPermissionState, requestAndSubscribe, unsubscribe } from '../lib/notifications'
 import { Avatar } from '../components/Avatar'
 import { CategoryBadge } from '../components/CategoryBadge'
 import type { Group, GroupType } from '../types'
@@ -15,6 +17,9 @@ const GROUP_TYPES: { value: GroupType; label: string; emoji: string }[] = [
   { value: 'restaurant', label: 'Restaurants', emoji: '🍽' },
   { value: 'bar', label: 'Bars', emoji: '🍸' },
   { value: 'coffee', label: 'Coffee', emoji: '☕' },
+  { value: 'bakery', label: 'Bakery', emoji: '🥐' },
+  { value: 'dessert', label: 'Dessert', emoji: '🍦' },
+  { value: 'nightclub', label: 'Nightclub', emoji: '🎉' },
   { value: 'other', label: 'Other', emoji: '📍' },
 ]
 
@@ -30,7 +35,7 @@ function DancingDots() {
   )
 }
 
-type DrawerType = 'places' | 'reviews' | null
+type DrawerType = 'places' | 'reviews' | 'wishlist' | null
 
 export function ProfilePage() {
   const { user, setUser } = useAuthStore()
@@ -66,12 +71,40 @@ export function ProfilePage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // avatar
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  const avatarGalleryRef = useRef<HTMLInputElement>(null)
+  const avatarCameraRef = useRef<HTMLInputElement>(null)
+
+  // notifications
+  const [notifPermission, setNotifPermission] = useState<ReturnType<typeof getPermissionState>>('default')
+  const [notifLoading, setNotifLoading] = useState(false)
+
   useEffect(() => {
     if (user) {
       loadStats()
       loadGroups()
+      setNotifPermission(getPermissionState())
     }
-  }, [user])
+  }, [user?.id])
+
+  async function handleNotifToggle() {
+    if (!user) return
+    setNotifLoading(true)
+    try {
+      if (notifPermission === 'granted') {
+        await unsubscribe(user.id)
+        setNotifPermission('default')
+      } else {
+        const result = await requestAndSubscribe(user.id)
+        if (result === 'granted') setNotifPermission('granted')
+        else if (result === 'denied') setNotifPermission('denied')
+      }
+    } finally {
+      setNotifLoading(false)
+    }
+  }
 
   async function loadStats() {
     const [{ count: reviews }, { count: places }] = await Promise.all([
@@ -100,13 +133,21 @@ export function ProfilePage() {
           .eq('added_by', user!.id)
           .order('created_at', { ascending: false })
         setDrawerItems(data ?? [])
-      } else {
+      } else if (type === 'reviews') {
         const { data } = await supabase
           .from('reviews')
           .select('id, rating, text, created_at, place_id, places(name, group_id)')
           .eq('user_id', user!.id)
           .order('created_at', { ascending: false })
         setDrawerItems(data ?? [])
+      } else if (type === 'wishlist') {
+        const { data } = await supabase
+          .from('place_checkins')
+          .select('id, created_at, place:places(id, name, category, cuisine, group_id, groups(name))')
+          .eq('user_id', user!.id)
+          .eq('status', 'want')
+          .order('created_at', { ascending: false })
+        setDrawerItems((data ?? []).map((r: any) => r.place).filter(Boolean))
       }
     } finally {
       setDrawerLoading(false)
@@ -185,11 +226,37 @@ export function ProfilePage() {
     }
   }
 
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setShowAvatarPicker(false)
+    setAvatarUploading(true)
+    try {
+      const compressed = await resizeImage(file, 400, 0.85)
+      const path = `avatars/${user.id}/avatar.jpg`
+      const { error: uploadError } = await supabase.storage.from('photos').upload(path, compressed, { upsert: true })
+      if (uploadError) throw uploadError
+      const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(path)
+      // Append a version param so browsers don't serve the old cached image
+      const urlWithVersion = `${publicUrl}?v=${Date.now()}`
+      const { error } = await supabase.from('users').update({ avatar_url: urlWithVersion }).eq('id', user.id)
+      if (error) throw error
+      setUser({ ...user, avatar_url: urlWithVersion })
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setAvatarUploading(false)
+      // reset inputs so same file can be re-selected
+      if (avatarGalleryRef.current) avatarGalleryRef.current.value = ''
+      if (avatarCameraRef.current) avatarCameraRef.current.value = ''
+    }
+  }
+
   if (!user) return null
 
   return (
-    <div className="min-h-svh bg-[#fafaf8] pb-24">
-      <div className="px-5 pt-16 flex flex-col gap-4">
+    <div className="min-h-svh bg-[#fafaf8] pb-10">
+      <div className="px-5 pt-6 flex flex-col gap-4">
 
         {/* Profile card */}
         <motion.div
@@ -198,8 +265,68 @@ export function ProfilePage() {
           className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm text-center"
         >
           <div className="flex justify-center mb-3">
-            <Avatar nickname={user.nickname} src={user.avatar_url} size={72} />
+            <div className="relative inline-block">
+              <button
+                onClick={() => setShowAvatarPicker(true)}
+                disabled={avatarUploading}
+                className="relative block rounded-full focus:outline-none"
+              >
+                {avatarUploading ? (
+                  <div className="w-[72px] h-[72px] rounded-full bg-gray-100 flex items-center justify-center">
+                    <div className="w-5 h-5 rounded-full border-2 border-violet-200 border-t-violet-500 animate-spin" />
+                  </div>
+                ) : (
+                  <Avatar nickname={user.nickname} src={user.avatar_url} size={72} />
+                )}
+                <span className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-violet-500 border-2 border-white flex items-center justify-center shadow-sm">
+                  <Camera size={11} className="text-white" />
+                </span>
+              </button>
+              <input ref={avatarGalleryRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+              <input ref={avatarCameraRef} type="file" accept="image/*" capture="environment" onChange={handleAvatarChange} className="hidden" />
+            </div>
           </div>
+
+          {/* Avatar picker popup */}
+          <AnimatePresence>
+            {showAvatarPicker && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-end justify-center bg-black/30"
+                onClick={() => setShowAvatarPicker(false)}
+              >
+                <motion.div
+                  initial={{ y: 40, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 40, opacity: 0 }}
+                  transition={{ type: 'spring', damping: 30, stiffness: 350 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full max-w-sm bg-white rounded-t-3xl px-5 pt-4 pb-8 shadow-2xl"
+                >
+                  <div className="w-8 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+                  <p className="text-sm font-semibold text-gray-700 mb-3 text-center">Change profile photo</p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => { setShowAvatarPicker(false); setTimeout(() => avatarGalleryRef.current?.click(), 100) }}
+                      className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-gray-50 hover:bg-violet-50 transition-colors"
+                    >
+                      <ImagePlus size={22} className="text-violet-500" />
+                      <span className="text-xs font-medium text-gray-600">Gallery</span>
+                    </button>
+                    <button
+                      onClick={() => { setShowAvatarPicker(false); setTimeout(() => avatarCameraRef.current?.click(), 100) }}
+                      className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-gray-50 hover:bg-violet-50 transition-colors"
+                    >
+                      <Camera size={22} className="text-violet-500" />
+                      <span className="text-xs font-medium text-gray-600">Camera</span>
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Nickname with edit */}
           {editNickname ? (
@@ -231,15 +358,22 @@ export function ProfilePage() {
           <p className="text-sm text-gray-400 mt-1">{user.email}</p>
 
           {/* Stats — clickable */}
-          <div className="flex gap-4 justify-center mt-5 pt-5 border-t border-gray-50">
-            <button onClick={() => openDrawer('places')} className="text-center group">
-              <p className="text-2xl font-semibold text-gray-900 group-hover:text-violet-600 transition-colors">{stats.places}</p>
-              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors">Places added</p>
+          <div className="flex gap-3 justify-center mt-5 pt-5 border-t border-gray-50">
+            <button onClick={() => openDrawer('places')} className="text-center group flex-1">
+              <p className="text-2xl font-bold text-gray-900 group-hover:text-violet-600 transition-colors">{stats.places}</p>
+              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors flex items-center justify-center gap-0.5"><MapPin size={10} /> Places</p>
             </button>
             <div className="w-px bg-gray-100" />
-            <button onClick={() => openDrawer('reviews')} className="text-center group">
-              <p className="text-2xl font-semibold text-gray-900 group-hover:text-violet-600 transition-colors">{stats.reviews}</p>
-              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors">Reviews written</p>
+            <button onClick={() => openDrawer('reviews')} className="text-center group flex-1">
+              <p className="text-2xl font-bold text-gray-900 group-hover:text-violet-600 transition-colors">{stats.reviews}</p>
+              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors">Reviews</p>
+            </button>
+            <div className="w-px bg-gray-100" />
+            <button onClick={() => openDrawer('wishlist')} className="text-center group flex-1">
+              <div className="flex justify-center">
+                <Bookmark size={22} className="text-gray-900 group-hover:text-violet-600 transition-colors" />
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5 group-hover:text-violet-400 transition-colors">Wishlist</p>
             </button>
           </div>
         </motion.div>
@@ -271,7 +405,12 @@ export function ProfilePage() {
                     onClick={() => navigate(`/group/${g.id}`)}
                     className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors cursor-pointer"
                   >
-                    <span className="text-lg">{GROUP_TYPES.find(t => t.value === g.type)?.emoji ?? '✨'}</span>
+                    <div className="w-8 h-8 rounded-lg overflow-hidden bg-violet-50 flex items-center justify-center shrink-0">
+                      {g.cover_photo
+                        ? <img src={g.cover_photo} alt={g.name} className="w-full h-full object-cover" />
+                        : <span className="text-base">{GROUP_TYPES.find(t => t.value === g.type)?.emoji ?? '✨'}</span>
+                      }
+                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{g.name}</p>
                       <p className="text-xs text-gray-400">{GROUP_TYPES.find(t => t.value === g.type)?.label ?? 'Mixed'}</p>
@@ -320,6 +459,31 @@ export function ProfilePage() {
           )}
         </motion.div>
 
+        {/* Notifications */}
+        {notifPermission !== 'unsupported' && (
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.12 }}
+            onClick={handleNotifToggle}
+            disabled={notifLoading || notifPermission === 'denied'}
+            className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border text-sm font-medium active:scale-95 transition-all disabled:opacity-50 ${
+              notifPermission === 'granted'
+                ? 'border-violet-200 text-violet-600 bg-violet-50'
+                : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            {notifPermission === 'granted' ? <BellOff size={16} /> : <Bell size={16} />}
+            {notifLoading
+              ? '...'
+              : notifPermission === 'granted'
+              ? 'Turn off notifications'
+              : notifPermission === 'denied'
+              ? 'Notifications blocked (change in browser settings)'
+              : 'Turn on notifications'}
+          </motion.button>
+        )}
+
         {/* Sign out */}
         <motion.button
           initial={{ opacity: 0 }}
@@ -352,7 +516,7 @@ export function ProfilePage() {
             >
               <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-50 shrink-0">
                 <h2 className="text-base font-semibold text-gray-900">
-                  {drawer === 'places' ? 'Places you added' : 'Your reviews'}
+                  {drawer === 'places' ? 'Places you added' : drawer === 'reviews' ? 'Your reviews' : '🔖 Wishlist'}
                 </h2>
                 <button onClick={() => setDrawer(null)} className="text-gray-400"><X size={20} /></button>
               </div>
@@ -364,7 +528,7 @@ export function ProfilePage() {
                   </div>
                 ) : drawerItems.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center pt-10">Nothing here yet.</p>
-                ) : drawer === 'places' ? (
+                ) : drawer === 'places' || drawer === 'wishlist' ? (
                   <div className="flex flex-col gap-2">
                     {drawerItems.map((p: any) => (
                       <button
@@ -372,7 +536,10 @@ export function ProfilePage() {
                         onClick={() => { setDrawer(null); navigate(`/group/${p.group_id}/place/${p.id}`) }}
                         className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50 hover:bg-violet-50 transition-colors text-left"
                       >
-                        <MapPin size={15} className="text-violet-400 shrink-0" />
+                        {drawer === 'wishlist'
+                          ? <Bookmark size={15} className="text-violet-400 shrink-0" />
+                          : <MapPin size={15} className="text-violet-400 shrink-0" />
+                        }
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
                           <p className="text-xs text-gray-400 truncate">

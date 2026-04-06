@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, MapPin, Search, ImagePlus, X, Check } from 'lucide-react'
+import { ChevronLeft, MapPin, Search, ImagePlus, Camera, X, Check } from 'lucide-react'
 import { createPlace, createReview, uploadPlaceCoverPhoto } from '../lib/places'
 import { getGroupById } from '../lib/groups'
 import { StarRating } from '../components/StarRating'
@@ -12,6 +12,9 @@ const CATEGORIES: { value: Category; label: string; emoji: string }[] = [
   { value: 'restaurant', label: 'Restaurant', emoji: '🍽' },
   { value: 'bar', label: 'Bar', emoji: '🍸' },
   { value: 'coffee', label: 'Coffee', emoji: '☕' },
+  { value: 'bakery', label: 'Bakery', emoji: '🥐' },
+  { value: 'dessert', label: 'Dessert', emoji: '🍦' },
+  { value: 'nightclub', label: 'Nightclub', emoji: '🎉' },
   { value: 'other', label: 'Other', emoji: '📍' },
 ]
 
@@ -74,8 +77,12 @@ export function AddPlacePage() {
   const [cuisine, setCuisine] = useState('')
   const [mapsUrl, setMapsUrl] = useState('')          // final google maps URL stored in DB
   const [linkedPlaceId, setLinkedPlaceId] = useState('')  // google place_id when confirmed
+  const [address, setAddress] = useState('')           // from Google Places secondaryText
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
+  const [googlePhotoUrl, setGooglePhotoUrl] = useState<string | null>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const [rating, setRating] = useState(0)
   const [reviewText, setReviewText] = useState('')
   const [saving, setSaving] = useState(false)
@@ -86,6 +93,7 @@ export function AddPlacePage() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const photoFetchToken = useRef<string>('')  // race condition guard
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -104,6 +112,11 @@ export function AddPlacePage() {
     setName(value)
     setLinkedPlaceId('')   // user is editing manually — unlink
     setMapsUrl('')
+    setAddress('')
+    // Clear stale Google photo when user edits name manually
+    photoFetchToken.current = ''
+    setGooglePhotoUrl(null)
+    if (!coverFile) setCoverPreview(null)
     if (searchTimer.current) clearTimeout(searchTimer.current)
     if (value.length < 2) { setSuggestions([]); setShowSuggestions(false); return }
     if (!GOOGLE_API_KEY) return   // no key — skip
@@ -126,13 +139,44 @@ export function AddPlacePage() {
     setShowSuggestions(false)
     setName(item.mainText)
     setLinkedPlaceId(item.placeId)
-    // Build a place_id-based Google Maps URL (opens the exact place)
+    setAddress(item.secondaryText)
     setMapsUrl(`https://www.google.com/maps/place/?q=place_id:${item.placeId}`)
+    // Clear previous Google photo immediately so stale image doesn't linger
+    if (!coverFile) { setGooglePhotoUrl(null); setCoverPreview(null) }
+    fetchGooglePhoto(item.placeId)
+  }
+
+  async function fetchGooglePhoto(placeId: string) {
+    if (!GOOGLE_API_KEY) return
+    const token = placeId
+    photoFetchToken.current = token
+    try {
+      const res = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
+        headers: { 'X-Goog-Api-Key': GOOGLE_API_KEY, 'X-Goog-FieldMask': 'photos' },
+      })
+      const data = await res.json()
+      const photoName = data.photos?.[0]?.name
+      if (!photoName || photoFetchToken.current !== token) return
+
+      const mediaRes = await fetch(
+        `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true&key=${GOOGLE_API_KEY}`
+      )
+      const mediaData = await mediaRes.json()
+      const url = mediaData.photoUri as string | undefined
+      if (!url || photoFetchToken.current !== token) return
+
+      setGooglePhotoUrl(url)
+      // Only set as preview if the user hasn't manually uploaded their own photo
+      setCoverPreview(prev => coverFile ? prev : url)
+    } catch {}
   }
 
   function clearLink() {
     setLinkedPlaceId('')
     setMapsUrl('')
+    setAddress('')
+    setGooglePhotoUrl(null)
+    setCoverPreview(prev => (prev === googlePhotoUrl ? null : prev))
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -144,7 +188,9 @@ export function AddPlacePage() {
         name,
         category,
         cuisine: cuisine || undefined,
+        address: address || undefined,
         google_maps_url: mapsUrl || undefined,
+        cover_photo: !coverFile ? (googlePhotoUrl || undefined) : undefined,
         added_by: user!.id,
       })
 
@@ -170,9 +216,9 @@ export function AddPlacePage() {
   }
 
   return (
-    <div className="min-h-svh bg-[#fafaf8] pb-16">
+    <div className="min-h-svh bg-[#fafaf8] pb-10">
       {/* Header */}
-      <div className="sticky top-0 bg-[#fafaf8]/90 backdrop-blur-md z-10 px-5 pt-12 pb-4">
+      <div className="sticky top-14 bg-[#fafaf8]/90 backdrop-blur-md z-10 px-5 pt-4 pb-4">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-700 transition-colors">
             <ChevronLeft size={22} />
@@ -285,34 +331,74 @@ export function AddPlacePage() {
         {/* Cover photo */}
         <div>
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Cover photo</label>
-          <label className="relative block cursor-pointer group">
-            <div className="w-full h-28 rounded-xl overflow-hidden bg-white border border-gray-200 border-dashed flex items-center justify-center">
-              {coverPreview ? (
+          <div className="relative w-full h-28 rounded-xl overflow-hidden bg-white border border-gray-200 border-dashed flex items-center justify-center">
+            {coverPreview ? (
+              <>
                 <img src={coverPreview} alt="cover" className="w-full h-full object-cover" />
-              ) : (
-                <div className="flex flex-col items-center gap-1 text-gray-300 group-hover:text-violet-400 transition-colors">
-                  <ImagePlus size={22} />
-                  <span className="text-xs">Upload cover photo (optional)</span>
+                {!coverFile && googlePhotoUrl && (
+                  <span className="absolute bottom-2 left-2 text-[10px] font-medium bg-black/50 text-white px-1.5 py-0.5 rounded-full">
+                    Google Maps
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCoverFile(null)
+                    // If this was a manually uploaded photo, fall back to Google photo (or clear)
+                    setCoverPreview(googlePhotoUrl ?? null)
+                  }}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 flex items-center justify-center text-white"
+                >
+                  <X size={14} />
+                </button>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <ImagePlus size={22} className="text-gray-300" />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-violet-50 hover:text-violet-500 transition-colors"
+                  >
+                    <ImagePlus size={13} /> Gallery
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-violet-50 hover:text-violet-500 transition-colors"
+                  >
+                    <Camera size={13} /> Camera
+                  </button>
                 </div>
-              )}
-              {coverPreview && (
-                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
-                  <ImagePlus size={20} className="text-white" />
-                </div>
-              )}
-            </div>
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (!file) return
-                setCoverFile(file)
-                setCoverPreview(URL.createObjectURL(file))
-              }}
-            />
-          </label>
+              </div>
+            )}
+          </div>
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              setCoverFile(file)
+              setCoverPreview(URL.createObjectURL(file))
+            }}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              setCoverFile(file)
+              setCoverPreview(URL.createObjectURL(file))
+            }}
+          />
         </div>
 
         {/* Initial review */}

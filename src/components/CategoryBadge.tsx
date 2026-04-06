@@ -4,6 +4,9 @@ const labels: Record<Category, string> = {
   restaurant: '🍽 Restaurant',
   bar: '🍸 Bar',
   coffee: '☕ Coffee',
+  bakery: '🥐 Bakery',
+  dessert: '🍦 Dessert',
+  nightclub: '🎉 Nightclub',
   other: '📍 Other',
 }
 
@@ -11,6 +14,9 @@ const colors: Record<Category, string> = {
   restaurant: 'bg-orange-50 text-orange-600',
   bar: 'bg-violet-50 text-violet-600',
   coffee: 'bg-amber-50 text-amber-700',
+  bakery: 'bg-yellow-50 text-yellow-700',
+  dessert: 'bg-pink-50 text-pink-600',
+  nightclub: 'bg-purple-50 text-purple-600',
   other: 'bg-gray-50 text-gray-600',
 }
 

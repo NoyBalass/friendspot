@@ -27,6 +27,15 @@ body {
   font-family: var(--font);
 }
 
+/* Auto-detect text direction — handles Hebrew, Arabic, etc. */
+input[type="text"],
+input[type="email"],
+input[type="search"],
+input:not([type]),
+textarea {
+  unicode-bidi: plaintext;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 4px;

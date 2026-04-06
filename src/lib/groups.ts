@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { cacheGet, cacheSet, cacheInvalidate } from './cache'
+import { resizeImage } from './imageUtils'
 
 function generateInviteCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase()
@@ -14,7 +15,8 @@ export async function createGroup(name: string, description: string, userId: str
     .single()
   if (error) throw error
 
-  await supabase.from('group_members').insert({ group_id: group.id, user_id: userId, role: 'admin' })
+  const { error: memberError } = await supabase.from('group_members').insert({ group_id: group.id, user_id: userId, role: 'admin' })
+  if (memberError) throw memberError
   cacheInvalidate(`groups:${userId}`)
   return group
 }
@@ -28,7 +30,8 @@ export async function joinGroupByCode(inviteCode: string, userId: string) {
     .from('group_members').select('id').eq('group_id', group.id).eq('user_id', userId).single()
   if (existing) return group
 
-  await supabase.from('group_members').insert({ group_id: group.id, user_id: userId, role: 'member' })
+  const { error: memberError } = await supabase.from('group_members').insert({ group_id: group.id, user_id: userId, role: 'member' })
+  if (memberError) throw memberError
   cacheInvalidate(`groups:${userId}`)
   return group
 }
@@ -46,10 +49,17 @@ export async function getUserGroups(userId: string) {
 async function fetchAndCacheGroups(key: string, userId: string) {
   const { data, error } = await supabase
     .from('group_members')
-    .select(`group_id, role, groups ( id, name, description, type, invite_code, created_by, created_at )`)
+    .select(`group_id, role, groups ( id, name, description, type, invite_code, created_by, created_at, cover_photo, group_members ( users ( id, nickname, avatar_url ) ) )`)
     .eq('user_id', userId)
   if (error) throw error
-  const result = data?.map((m: any) => ({ ...m.groups, role: m.role })) ?? []
+  const result = data?.map((m: any) => ({
+    ...m.groups,
+    role: m.role,
+    members: (m.groups?.group_members ?? [])
+      .map((gm: any) => gm.users)
+      .filter(Boolean)
+      .slice(0, 5),
+  })) ?? []
   cacheSet(key, result)
   return result
 }
@@ -84,6 +94,23 @@ export async function getGroupByInviteCode(code: string) {
     .from('groups').select('*').eq('invite_code', code.toUpperCase()).single()
   if (error) throw new Error('Group not found')
   return data
+}
+
+export async function uploadGroupCoverPhoto(groupId: string, file: File) {
+  const compressed = await resizeImage(file, 1200, 0.82)
+  const path = `groups/${groupId}/cover.jpg`
+
+  const { error: uploadError } = await supabase.storage.from('photos').upload(path, compressed, { upsert: true })
+  if (uploadError) throw uploadError
+
+  const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(path)
+
+  const { error } = await supabase.from('groups').update({ cover_photo: publicUrl }).eq('id', groupId)
+  if (error) throw error
+
+  cacheInvalidate(`group:${groupId}`)
+  cacheInvalidate(`groups:`)
+  return publicUrl
 }
 
 export async function getGroupMembers(groupId: string) {

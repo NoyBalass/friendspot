@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { cacheGet, cacheSet, cacheInvalidate } from './cache'
+import { resizeImage } from './imageUtils'
 import type { Category } from '../types'
 
 export async function getGroupPlaces(groupId: string, category?: Category, search?: string) {
@@ -14,7 +15,8 @@ export async function getGroupPlaces(groupId: string, category?: Category, searc
     p.name?.toLowerCase().includes(q) ||
     p.cuisine?.toLowerCase().includes(q) ||
     p.address?.toLowerCase().includes(q) ||
-    p.added_by_user?.nickname?.toLowerCase().includes(q)
+    p.added_by_user?.nickname?.toLowerCase().includes(q) ||
+    p.reviews?.some((r: any) => r.text?.toLowerCase().includes(q))
   )
 }
 
@@ -113,6 +115,7 @@ export async function createPlace(payload: {
   wolt_url?: string
   tabit_url?: string
   website_url?: string
+  cover_photo?: string
   added_by: string
 }) {
   const { data, error } = await supabase.from('places').insert(payload).select().single()
@@ -148,10 +151,10 @@ export async function createReview(payload: {
 }
 
 export async function uploadReviewPhoto(reviewId: string, file: File) {
-  const ext = file.name.split('.').pop()
-  const path = `reviews/${reviewId}/${Date.now()}.${ext}`
+  const compressed = await resizeImage(file, 1200, 0.82)
+  const path = `reviews/${reviewId}/${Date.now()}.jpg`
 
-  const { error: uploadError } = await supabase.storage.from('photos').upload(path, file)
+  const { error: uploadError } = await supabase.storage.from('photos').upload(path, compressed)
   if (uploadError) throw uploadError
 
   const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(path)
@@ -165,10 +168,10 @@ export async function uploadReviewPhoto(reviewId: string, file: File) {
 }
 
 export async function uploadPlaceCoverPhoto(placeId: string, file: File) {
-  const ext = file.name.split('.').pop()
-  const path = `places/${placeId}/cover.${ext}`
+  const compressed = await resizeImage(file, 1200, 0.82)
+  const path = `places/${placeId}/cover.jpg`
 
-  const { error: uploadError } = await supabase.storage.from('photos').upload(path, file, { upsert: true })
+  const { error: uploadError } = await supabase.storage.from('photos').upload(path, compressed, { upsert: true })
   if (uploadError) throw uploadError
 
   const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(path)
@@ -218,6 +221,6 @@ export async function getUserReviewForPlace(placeId: string, userId: string) {
     .select('id, rating, text')
     .eq('place_id', placeId)
     .eq('user_id', userId)
-    .single()
+    .maybeSingle()
   return data
 }

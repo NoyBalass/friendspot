@@ -1,5 +1,5 @@
-export type Category = 'restaurant' | 'bar' | 'coffee' | 'other'
-export type GroupType = 'all' | 'restaurant' | 'bar' | 'coffee' | 'other'
+export type Category = 'restaurant' | 'bar' | 'coffee' | 'bakery' | 'dessert' | 'nightclub' | 'other'
+export type GroupType = 'all' | 'restaurant' | 'bar' | 'coffee' | 'bakery' | 'dessert' | 'nightclub' | 'other'
 
 export interface User {
   id: string
@@ -17,7 +17,9 @@ export interface Group {
   invite_code: string
   created_by: string
   created_at: string
+  cover_photo?: string
   member_count?: number
+  members?: User[]
 }
 
 export interface GroupMember {

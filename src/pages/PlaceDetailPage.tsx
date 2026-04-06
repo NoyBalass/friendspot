@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, MapPin, Globe, ExternalLink, Phone, Plus, Pencil, X, Camera, Settings, ImagePlus } from 'lucide-react'
 import { getPlaceById, getPlaceReviews, upsertReview, uploadReviewPhoto, getUserReviewForPlace, updatePlace, uploadPlaceCoverPhoto } from '../lib/places'
+import { getCheckin, setCheckin, getCheckinCounts, type CheckinStatus } from '../lib/checkins'
 import { StarRating } from '../components/StarRating'
 import { ReviewCard } from '../components/ReviewCard'
 import { CategoryBadge } from '../components/CategoryBadge'
@@ -34,6 +35,9 @@ export function PlaceDetailPage() {
   const [text, setText] = useState('')
   const [photos, setPhotos] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [checkin, setCheckinState] = useState<CheckinStatus>(null)
+  const [checkinCounts, setCheckinCounts] = useState<{ want: number; been: number }>({ want: 0, been: 0 })
+  const [checkinSaving, setCheckinSaving] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [editName, setEditName] = useState('')
   const [editCuisine, setEditCuisine] = useState('')
@@ -41,6 +45,10 @@ export function PlaceDetailPage() {
   const [editSaving, setEditSaving] = useState(false)
   const [editCoverFile, setEditCoverFile] = useState<File | null>(null)
   const [editCoverPreview, setEditCoverPreview] = useState<string | null>(null)
+  const editGalleryRef = useRef<HTMLInputElement>(null)
+  const editCameraRef = useRef<HTMLInputElement>(null)
+  const reviewGalleryRef = useRef<HTMLInputElement>(null)
+  const reviewCameraRef = useRef<HTMLInputElement>(null)
   // Google Places auto-fetched links
   const [googleLinks, setGoogleLinks] = useState<{ website?: string; instagram?: string; phone?: string } | null>(null)
 
@@ -51,13 +59,17 @@ export function PlaceDetailPage() {
   async function load() {
     setLoading(true)
     try {
-      const [p, r, existing] = await Promise.all([
+      const [p, r, existing, ci, counts] = await Promise.all([
         getPlaceById(placeId!),
         getPlaceReviews(placeId!),
         getUserReviewForPlace(placeId!, user!.id),
+        getCheckin(placeId!, user!.id),
+        getCheckinCounts(placeId!),
       ])
       setPlace(p)
       setReviews(r)
+      setCheckinState(ci)
+      setCheckinCounts(counts)
       if (existing) {
         setExistingReviewId(existing.id)
         setRating(existing.rating ?? 0)
@@ -164,6 +176,34 @@ export function PlaceDetailPage() {
     setEditCoverPreview(URL.createObjectURL(file))
   }
 
+  async function handleCheckin(status: CheckinStatus) {
+    if (checkinSaving) return
+    setCheckinSaving(true)
+    const next = checkin === status ? null : status
+    const prev = checkin
+    // optimistic update
+    setCheckinState(next)
+    setCheckinCounts(c => {
+      const updated = { ...c }
+      if (prev) updated[prev] = Math.max(0, updated[prev] - 1)
+      if (next) updated[next] = updated[next] + 1
+      return updated
+    })
+    try {
+      await setCheckin(placeId!, user!.id, next)
+    } catch {
+      setCheckinState(prev)
+      setCheckinCounts(c => {
+        const reverted = { ...c }
+        if (next) reverted[next] = Math.max(0, reverted[next] - 1)
+        if (prev) reverted[prev] = reverted[prev] + 1
+        return reverted
+      })
+    } finally {
+      setCheckinSaving(false)
+    }
+  }
+
   function openReviewSheet() {
     setShowReview(true)
   }
@@ -192,7 +232,7 @@ export function PlaceDetailPage() {
 
   if (loading && !place) {
     return (
-      <div className="min-h-svh bg-[#fafaf8] pb-28 animate-pulse">
+      <div className="min-h-svh bg-[#fafaf8] pb-10 animate-pulse">
         <div className="h-28 bg-gray-200" />
         <div className="px-5 mt-3">
           <div className="bg-white rounded-3xl p-5 space-y-3">
@@ -233,7 +273,7 @@ export function PlaceDetailPage() {
   })()
 
   return (
-    <div className="min-h-svh bg-[#fafaf8] pb-28">
+    <div className="min-h-svh bg-[#fafaf8] pb-10">
       {/* Cover */}
       <div className="relative h-28 bg-gray-100 overflow-hidden">
         {place.cover_photo ? (
@@ -265,8 +305,8 @@ export function PlaceDetailPage() {
         <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-50">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-semibold text-gray-900 leading-tight">{place.name}</h1>
-              {place.cuisine && <p className="text-sm text-gray-400 mt-0.5">{place.cuisine}</p>}
+              <h1 dir="auto" className="text-xl font-semibold text-gray-900 leading-tight">{place.name}</h1>
+              {place.cuisine && <p dir="auto" className="text-sm text-gray-400 mt-0.5">{place.cuisine}</p>}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {place.added_by === user?.id && (
@@ -314,6 +354,32 @@ export function PlaceDetailPage() {
           </div>
         </div>
 
+        {/* Want to go / Been there */}
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => handleCheckin('want')}
+            disabled={checkinSaving}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+              checkin === 'want'
+                ? 'bg-violet-500 border-violet-500 text-white shadow-sm shadow-violet-200'
+                : 'bg-white border-gray-200 text-gray-500 hover:border-violet-200 hover:text-violet-500'
+            }`}
+          >
+            🔖 Want to go{checkinCounts.want > 0 && <span className={`text-xs ${checkin === 'want' ? 'text-violet-200' : 'text-gray-400'}`}>{checkinCounts.want}</span>}
+          </button>
+          <button
+            onClick={() => handleCheckin('been')}
+            disabled={checkinSaving}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+              checkin === 'been'
+                ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-200'
+                : 'bg-white border-gray-200 text-gray-500 hover:border-emerald-200 hover:text-emerald-500'
+            }`}
+          >
+            ✅ Been there{checkinCounts.been > 0 && <span className={`text-xs ${checkin === 'been' ? 'text-emerald-200' : 'text-gray-400'}`}>{checkinCounts.been}</span>}
+          </button>
+        </div>
+
         {/* Add / Edit review — always visible */}
         <motion.button
           whileTap={{ scale: 0.97 }}
@@ -333,6 +399,7 @@ export function PlaceDetailPage() {
               <ReviewCard
                 key={review.id}
                 review={review}
+                placeId={placeId!}
                 index={i}
                 currentUserId={user?.id}
                 onPhotoAdded={load}
@@ -370,24 +437,42 @@ export function PlaceDetailPage() {
                 {/* Cover photo */}
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Cover photo</p>
-                  <label className="relative block cursor-pointer group">
-                    <div className="w-full h-28 rounded-xl overflow-hidden bg-gray-50 border border-gray-200 border-dashed flex items-center justify-center">
-                      {editCoverPreview ? (
+                  <div className="relative w-full h-28 rounded-xl overflow-hidden bg-gray-50 border border-gray-200 border-dashed flex items-center justify-center">
+                    {editCoverPreview ? (
+                      <>
                         <img src={editCoverPreview} alt="cover" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="flex flex-col items-center gap-1 text-gray-300 group-hover:text-violet-400 transition-colors">
-                          <ImagePlus size={22} />
-                          <span className="text-xs">Upload cover photo</span>
+                        <button
+                          type="button"
+                          onClick={() => { setEditCoverFile(null); setEditCoverPreview(null) }}
+                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 flex items-center justify-center text-white"
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center gap-3">
+                        <ImagePlus size={22} className="text-gray-300" />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => editGalleryRef.current?.click()}
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-violet-50 hover:text-violet-500 transition-colors"
+                          >
+                            <ImagePlus size={13} /> Gallery
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => editCameraRef.current?.click()}
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-violet-50 hover:text-violet-500 transition-colors"
+                          >
+                            <Camera size={13} /> Camera
+                          </button>
                         </div>
-                      )}
-                      {editCoverPreview && (
-                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
-                          <ImagePlus size={20} className="text-white" />
-                        </div>
-                      )}
-                    </div>
-                    <input type="file" accept="image/*" onChange={handleCoverFileChange} className="hidden" />
-                  </label>
+                      </div>
+                    )}
+                  </div>
+                  <input ref={editGalleryRef} type="file" accept="image/*" onChange={handleCoverFileChange} className="hidden" />
+                  <input ref={editCameraRef} type="file" accept="image/*" capture="environment" onChange={handleCoverFileChange} className="hidden" />
                   <p className="text-xs text-gray-300 mt-1.5">If left empty, the Google Maps location will be shown instead</p>
                 </div>
 
@@ -470,11 +555,24 @@ export function PlaceDetailPage() {
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300 resize-none"
                 />
 
-                <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer hover:text-violet-500 transition-colors">
-                  <Camera size={16} />
-                  {photos.length > 0 ? `${photos.length} photo${photos.length > 1 ? 's' : ''} selected` : 'Add photos'}
-                  <input type="file" accept="image/*" multiple onChange={(e) => setPhotos(e.target.files ? Array.from(e.target.files) : [])} className="hidden" />
-                </label>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-400 flex items-center gap-1.5">
+                    <Camera size={16} />
+                    {photos.length > 0 ? `${photos.length} photo${photos.length > 1 ? 's' : ''} selected` : 'Add photos'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => reviewGalleryRef.current?.click()}
+                    className="text-xs text-gray-400 hover:text-violet-500 transition-colors underline"
+                  >Gallery</button>
+                  <button
+                    type="button"
+                    onClick={() => reviewCameraRef.current?.click()}
+                    className="text-xs text-gray-400 hover:text-violet-500 transition-colors underline"
+                  >Camera</button>
+                  <input ref={reviewGalleryRef} type="file" accept="image/*" multiple onChange={(e) => setPhotos(e.target.files ? Array.from(e.target.files) : [])} className="hidden" />
+                  <input ref={reviewCameraRef} type="file" accept="image/*" capture="environment" onChange={(e) => { const f = e.target.files?.[0]; if (f) setPhotos(prev => [...prev, f]) }} className="hidden" />
+                </div>
 
                 <button
                   type="submit"
