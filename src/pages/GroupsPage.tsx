@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Link, X, Check, Settings, Trash2, ImagePlus, Camera, Share2 } from 'lucide-react'
+import { Plus, Link, X, Check, Settings, Trash2, ImagePlus, Camera, Share2, Map } from 'lucide-react'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
+import { MapOverlay } from '../components/MapOverlay'
 
 function DancingDots() {
   return (
@@ -64,6 +65,7 @@ export function GroupsPage() {
   const createCameraRef = useRef<HTMLInputElement>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [showMap, setShowMap] = useState(false)
 
   useEffect(() => {
     if (user) load()
@@ -192,8 +194,18 @@ export function GroupsPage() {
 
       {/* Header */}
       <div className="sticky top-14 bg-[#fafaf8]/90 backdrop-blur-md z-10 px-5 pt-4 pb-4">
-        <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{t.groups.title}</h1>
-        <p className="text-sm text-gray-400 mt-0.5">{t.groups.subtitle}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{t.groups.title}</h1>
+            <p className="text-sm text-gray-400 mt-0.5">{t.groups.subtitle}</p>
+          </div>
+          <button
+            onClick={() => setShowMap(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-600 text-sm font-medium hover:bg-violet-50 hover:border-violet-200 hover:text-violet-600 transition-colors shadow-sm"
+          >
+            <Map size={15} /> Map
+          </button>
+        </div>
       </div>
 
       <div className="px-5">
@@ -466,6 +478,11 @@ export function GroupsPage() {
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* Map overlay */}
+      <AnimatePresence>
+        {showMap && <MapOverlay onClose={() => setShowMap(false)} />}
       </AnimatePresence>
 
       {/* Edit group modal */}

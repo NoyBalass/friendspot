@@ -99,6 +99,35 @@ export async function searchAllPlaces(userId: string, query: string) {
     .slice(0, 40)
 }
 
+export async function getAllPlacesForMap(userId: string) {
+  const { data: memberships } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('user_id', userId)
+  const groupIds = (memberships ?? []).map((m: any) => m.group_id)
+  if (!groupIds.length) return []
+
+  const { data, error } = await supabase
+    .from('places')
+    .select(`
+      id, name, category, cuisine, group_id, latitude, longitude,
+      reviews ( rating ),
+      groups ( name )
+    `)
+    .in('group_id', groupIds)
+    .not('latitude', 'is', null)
+    .not('longitude', 'is', null)
+
+  if (error) throw error
+  return (data ?? []).map((p: any) => ({
+    ...p,
+    avg_rating: p.reviews?.length
+      ? p.reviews.reduce((s: number, r: any) => s + r.rating, 0) / p.reviews.length
+      : null,
+    group_name: p.groups?.name ?? '',
+  }))
+}
+
 export async function getPlaceById(placeId: string) {
   const key = `place:${placeId}`
   const cached = cacheGet<any>(key)
@@ -159,6 +188,8 @@ export async function createPlace(payload: {
   website_url?: string
   cover_photo?: string
   added_by: string
+  latitude?: number
+  longitude?: number
 }) {
   const { data, error } = await supabase.from('places').insert(payload).select().single()
   if (error) throw error

@@ -247,8 +247,9 @@ export function GroupFeedPage() {
 
   function pickRandom() {
     if (!places.length) return
-    const pick = places[Math.floor(Math.random() * places.length)]
-    setPickedPlace(pick)
+    const highRated = places.filter(p => (p.avg_rating ?? 0) >= 4)
+    const pool = highRated.length > 0 ? highRated : places
+    setPickedPlace(pool[Math.floor(Math.random() * pool.length)])
   }
 
   return (

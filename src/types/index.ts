@@ -52,6 +52,8 @@ export interface Place {
   review_users?: User[]
   want_count?: number
   been_count?: number
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export interface Review {

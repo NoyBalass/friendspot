@@ -75,9 +75,10 @@ export function AddPlacePage() {
   const [name, setName] = useState('')
   const [category, setCategory] = useState<Category>('restaurant')
   const [cuisine, setCuisine] = useState('')
-  const [mapsUrl, setMapsUrl] = useState('')          // final google maps URL stored in DB
-  const [linkedPlaceId, setLinkedPlaceId] = useState('')  // google place_id when confirmed
-  const [address, setAddress] = useState('')           // from Google Places secondaryText
+  const [mapsUrl, setMapsUrl] = useState('')
+  const [linkedPlaceId, setLinkedPlaceId] = useState('')
+  const [address, setAddress] = useState('')
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [instagramUrl, setInstagramUrl] = useState('')
   const [isManualMode, setIsManualMode] = useState(false)
   const [coverFile, setCoverFile] = useState<File | null>(null)
@@ -160,31 +161,37 @@ export function AddPlacePage() {
     setAddress(item.secondaryText)
     setMapsUrl(`https://www.google.com/maps/place/?q=place_id:${item.placeId}`)
     // Clear previous Google photo immediately so stale image doesn't linger
+    setCoords(null)
     if (!coverFile) { setGooglePhotoUrl(null); setCoverPreview(null) }
-    fetchGooglePhoto(item.placeId)
+    fetchGoogleDetails(item.placeId)
   }
 
-  async function fetchGooglePhoto(placeId: string) {
+  async function fetchGoogleDetails(placeId: string) {
     if (!GOOGLE_API_KEY) return
     const token = placeId
     photoFetchToken.current = token
     try {
       const res = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
-        headers: { 'X-Goog-Api-Key': GOOGLE_API_KEY, 'X-Goog-FieldMask': 'photos' },
+        headers: { 'X-Goog-Api-Key': GOOGLE_API_KEY, 'X-Goog-FieldMask': 'photos,location' },
       })
       const data = await res.json()
-      const photoName = data.photos?.[0]?.name
-      if (!photoName || photoFetchToken.current !== token) return
+      if (photoFetchToken.current !== token) return
 
+      // Store coordinates
+      if (data.location?.latitude != null && data.location?.longitude != null) {
+        setCoords({ lat: data.location.latitude, lng: data.location.longitude })
+      }
+
+      // Store photo
+      const photoName = data.photos?.[0]?.name
+      if (!photoName) return
       const mediaRes = await fetch(
         `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true&key=${GOOGLE_API_KEY}`
       )
       const mediaData = await mediaRes.json()
       const url = mediaData.photoUri as string | undefined
       if (!url || photoFetchToken.current !== token) return
-
       setGooglePhotoUrl(url)
-      // Only set as preview if the user hasn't manually uploaded their own photo
       setCoverPreview(prev => coverFile ? prev : url)
     } catch {}
   }
@@ -193,6 +200,7 @@ export function AddPlacePage() {
     setLinkedPlaceId('')
     setMapsUrl('')
     setAddress('')
+    setCoords(null)
     setGooglePhotoUrl(null)
     setCoverPreview(prev => (prev === googlePhotoUrl ? null : prev))
   }
@@ -215,6 +223,8 @@ export function AddPlacePage() {
         instagram_url: instagramUrl || undefined,
         cover_photo: !coverFile ? (googlePhotoUrl || undefined) : undefined,
         added_by: user!.id,
+        latitude: coords?.lat,
+        longitude: coords?.lng,
       })
 
       if (coverFile) {
