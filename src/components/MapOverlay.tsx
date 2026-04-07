@@ -135,10 +135,7 @@ export function MapOverlay({ onClose }: { onClose: () => void }) {
         { icon: makeIcon(L, place.category, selected?.id === place.id) }
       )
         .addTo(mapRef.current)
-        .on('click', () => {
-          setSelected(place)
-          mapRef.current?.panTo([place.latitude, place.longitude], { animate: true })
-        })
+        .on('click', () => goToPlace(place))
       markersRef.current.push(marker)
     })
 
