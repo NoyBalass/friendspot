@@ -149,13 +149,31 @@ export function ProfilePage() {
           .order('created_at', { ascending: false })
         setDrawerItems(data ?? [])
       } else if (type === 'wishlist') {
-        const { data } = await supabase
+        const { data: myWishlist } = await supabase
           .from('place_checkins')
-          .select('id, created_at, place:places(id, name, category, cuisine, group_id, groups(name))')
+          .select('id, created_at, place_id, place:places(id, name, category, cuisine, group_id, groups(name))')
           .eq('user_id', user!.id)
           .eq('status', 'want')
           .order('created_at', { ascending: false })
-        setDrawerItems((data ?? []).map((r: any) => r.place).filter(Boolean))
+
+        const placeIds = (myWishlist ?? []).map((r: any) => r.place_id).filter(Boolean)
+        let wantMap: Record<string, any[]> = {}
+        if (placeIds.length > 0) {
+          const { data: others } = await supabase
+            .from('place_checkins')
+            .select('place_id, user:users(id, nickname, avatar_url)')
+            .in('place_id', placeIds)
+            .eq('status', 'want')
+            .neq('user_id', user!.id)
+          for (const row of (others ?? [])) {
+            if (!wantMap[row.place_id]) wantMap[row.place_id] = []
+            if (row.user) wantMap[row.place_id].push(row.user)
+          }
+        }
+        setDrawerItems((myWishlist ?? []).map((r: any) => ({
+          ...r.place,
+          want_users: wantMap[r.place_id] ?? [],
+        })).filter(Boolean))
       }
     } finally {
       setDrawerLoading(false)
@@ -597,6 +615,22 @@ export function ProfilePage() {
                           <p className="text-xs text-gray-400 truncate">
                             {p.cuisine ? `${p.cuisine} · ` : ''}{(p.groups as any)?.name ?? ''}
                           </p>
+                          {drawer === 'wishlist' && p.want_users?.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <div className="flex -space-x-1">
+                                {p.want_users.slice(0, 4).map((u: any) => (
+                                  <div key={u.id} className="w-4 h-4 rounded-full ring-1 ring-white overflow-hidden">
+                                    <Avatar nickname={u.nickname} src={u.avatar_url} size={16} />
+                                  </div>
+                                ))}
+                              </div>
+                              <span className="text-[10px] text-violet-400 font-medium">
+                                {p.want_users.length === 1
+                                  ? `${p.want_users[0].nickname} also wants to go`
+                                  : `${p.want_users.length} others want to go`}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <CategoryBadge category={p.category} small />
                       </button>

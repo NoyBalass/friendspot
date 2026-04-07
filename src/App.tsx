@@ -89,19 +89,25 @@ export default function App() {
   useEffect(() => {
     registerServiceWorker()
 
+    // Timeout fallback so loading never hangs on network issues
+    const timeout = setTimeout(() => setLoading(false), 6000)
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      clearTimeout(timeout)
       setSession(session)
       if (session?.user) {
-        const profile = await loadUserProfile(
-          session.user.id,
-          session.user.email ?? '',
-          session.user.user_metadata?.nickname
-        )
-        setUser(profile)
-        await processPendingInvite(session.user.id)
+        try {
+          const profile = await loadUserProfile(
+            session.user.id,
+            session.user.email ?? '',
+            session.user.user_metadata?.nickname
+          )
+          setUser(profile)
+          await processPendingInvite(session.user.id)
+        } catch {}
       }
       setLoading(false)
-    })
+    }).catch(() => { clearTimeout(timeout); setLoading(false) })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session)

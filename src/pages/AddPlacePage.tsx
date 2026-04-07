@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, MapPin, Search, ImagePlus, Camera, X, Check } from 'lucide-react'
-import { createPlace, createReview, uploadPlaceCoverPhoto } from '../lib/places'
+import { ChevronLeft, MapPin, Search, ImagePlus, Camera, X, Check, Link } from 'lucide-react'
+import { createPlace, createReview, uploadPlaceCoverPhoto, uploadReviewPhoto } from '../lib/places'
 import { getGroupById } from '../lib/groups'
 import { StarRating } from '../components/StarRating'
 import { useAuthStore } from '../store/useAuthStore'
@@ -78,6 +78,8 @@ export function AddPlacePage() {
   const [mapsUrl, setMapsUrl] = useState('')          // final google maps URL stored in DB
   const [linkedPlaceId, setLinkedPlaceId] = useState('')  // google place_id when confirmed
   const [address, setAddress] = useState('')           // from Google Places secondaryText
+  const [instagramUrl, setInstagramUrl] = useState('')
+  const [isManualMode, setIsManualMode] = useState(false)
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [googlePhotoUrl, setGooglePhotoUrl] = useState<string | null>(null)
@@ -85,6 +87,10 @@ export function AddPlacePage() {
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const [rating, setRating] = useState(0)
   const [reviewText, setReviewText] = useState('')
+  const [reviewPhotoFile, setReviewPhotoFile] = useState<File | null>(null)
+  const [reviewPhotoPreview, setReviewPhotoPreview] = useState<string | null>(null)
+  const reviewPhotoRef = useRef<HTMLInputElement>(null)
+  const reviewCameraRef = useRef<HTMLInputElement>(null)
   const [saving, setSaving] = useState(false)
 
   // Autocomplete
@@ -118,6 +124,7 @@ export function AddPlacePage() {
     setGooglePhotoUrl(null)
     if (!coverFile) setCoverPreview(null)
     if (searchTimer.current) clearTimeout(searchTimer.current)
+    if (isManualMode) return  // skip autocomplete in manual mode
     if (value.length < 2) { setSuggestions([]); setShowSuggestions(false); return }
     if (!GOOGLE_API_KEY) return   // no key — skip
     setSearching(true)
@@ -132,6 +139,14 @@ export function AddPlacePage() {
       }
       setSearching(false)
     }, 350)
+  }
+
+  function enterManualMode() {
+    setIsManualMode(true)
+    setSuggestions([])
+    setShowSuggestions(false)
+    setSearching(false)
+    if (searchTimer.current) clearTimeout(searchTimer.current)
   }
 
   async function selectSuggestion(item: Suggestion) {
@@ -181,6 +196,10 @@ export function AddPlacePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (reviewPhotoFile && rating === 0) {
+      alert('Please add a star rating to include a photo with your review.')
+      return
+    }
     setSaving(true)
     try {
       const place = await createPlace({
@@ -190,6 +209,7 @@ export function AddPlacePage() {
         cuisine: cuisine || undefined,
         address: address || undefined,
         google_maps_url: mapsUrl || undefined,
+        instagram_url: instagramUrl || undefined,
         cover_photo: !coverFile ? (googlePhotoUrl || undefined) : undefined,
         added_by: user!.id,
       })
@@ -199,12 +219,15 @@ export function AddPlacePage() {
       }
 
       if (rating > 0) {
-        await createReview({
+        const review = await createReview({
           place_id: place.id,
           user_id: user!.id,
           rating,
           text: reviewText || undefined,
         })
+        if (reviewPhotoFile && review?.id) {
+          await uploadReviewPhoto(review.id, reviewPhotoFile)
+        }
       }
 
       navigate(`/group/${groupId}/place/${place.id}`)
@@ -232,13 +255,13 @@ export function AddPlacePage() {
         <div ref={wrapperRef} className="relative">
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">Place name</label>
           <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
-            <Search size={15} className="text-gray-300 shrink-0" />
+            {!isManualMode && <Search size={15} className="text-gray-300 shrink-0" />}
             <input
               type="text"
-              placeholder="Search on Google Maps…"
+              placeholder={isManualMode ? 'Place name…' : 'Search on Google Maps…'}
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
-              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              onFocus={() => !isManualMode && suggestions.length > 0 && setShowSuggestions(true)}
               required
               className="flex-1 px-3 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
             />
@@ -265,9 +288,25 @@ export function AddPlacePage() {
             )}
           </AnimatePresence>
 
+          {/* Not found prompt */}
+          <AnimatePresence>
+            {!isManualMode && !linkedPlaceId && name.length >= 2 && !searching && (
+              <motion.button
+                type="button"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={enterManualMode}
+                className="mt-1.5 text-xs text-violet-500 font-medium hover:text-violet-700 transition-colors"
+              >
+                Not found on Google Maps? Add manually →
+              </motion.button>
+            )}
+          </AnimatePresence>
+
           {/* Suggestions dropdown */}
           <AnimatePresence>
-            {showSuggestions && (
+            {showSuggestions && !isManualMode && (
               <motion.div
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -292,6 +331,56 @@ export function AddPlacePage() {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Manual mode: address + links */}
+        <AnimatePresence>
+          {isManualMode && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden flex flex-col gap-3"
+            >
+              <div className="flex items-center gap-2 text-xs text-violet-500 font-medium bg-violet-50 rounded-xl px-3 py-2">
+                <Check size={12} className="shrink-0" />
+                <span>Manual mode — Google Maps search skipped</span>
+                <button type="button" onClick={() => setIsManualMode(false)} className="ml-auto text-gray-400 hover:text-gray-600">
+                  <X size={12} />
+                </button>
+              </div>
+              <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
+                <MapPin size={15} className="text-gray-300 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Address (optional)"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="flex-1 px-3 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
+                />
+              </div>
+              <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
+                <Link size={15} className="text-gray-300 shrink-0" />
+                <input
+                  type="url"
+                  placeholder="Google Maps URL (optional)"
+                  value={mapsUrl}
+                  onChange={(e) => setMapsUrl(e.target.value)}
+                  className="flex-1 px-3 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
+                />
+              </div>
+              <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 focus-within:border-violet-300 transition-colors">
+                <span className="text-gray-300 text-sm shrink-0">@</span>
+                <input
+                  type="url"
+                  placeholder="Instagram URL (optional)"
+                  value={instagramUrl}
+                  onChange={(e) => setInstagramUrl(e.target.value)}
+                  className="flex-1 px-3 py-3 text-sm outline-none bg-transparent placeholder:text-gray-300"
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Category — only shown for mixed groups */}
         {!isSpecificType && (
@@ -412,6 +501,64 @@ export function AddPlacePage() {
             rows={3}
             className="w-full mt-3 px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-violet-300 bg-gray-50 placeholder:text-gray-300 resize-none"
           />
+
+          {/* Review photo */}
+          <div className="mt-3">
+            {reviewPhotoPreview ? (
+              <div className="relative w-full h-28 rounded-xl overflow-hidden">
+                <img src={reviewPhotoPreview} alt="review" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => { setReviewPhotoFile(null); setReviewPhotoPreview(null) }}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 flex items-center justify-center text-white"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => reviewPhotoRef.current?.click()}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-violet-50 hover:text-violet-500 transition-colors"
+                >
+                  <ImagePlus size={13} /> Add photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => reviewCameraRef.current?.click()}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-violet-50 hover:text-violet-500 transition-colors"
+                >
+                  <Camera size={13} /> Camera
+                </button>
+              </div>
+            )}
+            <input
+              ref={reviewPhotoRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                setReviewPhotoFile(file)
+                setReviewPhotoPreview(URL.createObjectURL(file))
+              }}
+            />
+            <input
+              ref={reviewCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                setReviewPhotoFile(file)
+                setReviewPhotoPreview(URL.createObjectURL(file))
+              }}
+            />
+          </div>
         </div>
 
         <motion.button
