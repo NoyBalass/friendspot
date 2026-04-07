@@ -119,14 +119,14 @@ export function AddPlacePage() {
     setLinkedPlaceId('')   // user is editing manually — unlink
     setMapsUrl('')
     setAddress('')
-    // Clear stale Google photo when user edits name manually
     photoFetchToken.current = ''
     setGooglePhotoUrl(null)
     if (!coverFile) setCoverPreview(null)
     if (searchTimer.current) clearTimeout(searchTimer.current)
-    if (isManualMode) return  // skip autocomplete in manual mode
-    if (value.length < 2) { setSuggestions([]); setShowSuggestions(false); return }
-    if (!GOOGLE_API_KEY) return   // no key — skip
+    // always reset spinner on any early exit
+    if (isManualMode) { setSearching(false); return }
+    if (value.length < 2) { setSearching(false); setSuggestions([]); setShowSuggestions(false); return }
+    if (!GOOGLE_API_KEY) { setSearching(false); return }
     setSearching(true)
     searchTimer.current = setTimeout(async () => {
       try {
@@ -136,8 +136,9 @@ export function AddPlacePage() {
         setShowSuggestions(items.length > 0)
       } catch (err) {
         console.error('Places autocomplete error:', err)
+      } finally {
+        setSearching(false)
       }
-      setSearching(false)
     }, 350)
   }
 
@@ -150,6 +151,8 @@ export function AddPlacePage() {
   }
 
   async function selectSuggestion(item: Suggestion) {
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    setSearching(false)
     setSuggestions([])
     setShowSuggestions(false)
     setName(item.mainText)
