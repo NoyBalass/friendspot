@@ -109,7 +109,46 @@ export function AdminBackfillPage() {
     push('Compression backfill done.')
   }
 
-  // ── 3. Compress existing review photos ──────────────────────────────────
+  // ── 3. Backfill lat/lng from Google Places API ──────────────────────────
+  async function runCoordinatesBackfill() {
+    push('— Fetching places without coordinates…')
+    const { data: places, error } = await supabase
+      .from('places')
+      .select('id, name, google_maps_url')
+      .is('latitude', null)
+      .not('google_maps_url', 'is', null)
+
+    if (error) { push(`Error fetching places: ${error.message}`, 'err'); return }
+    push(`Found ${places?.length ?? 0} places to geocode.`)
+
+    for (const place of places ?? []) {
+      const match = place.google_maps_url?.match(/place_id:([^&\s]+)/)
+      if (!match) { push(`${place.name} — no place_id, skip`, 'skip'); continue }
+      const placeId = match[1]
+      try {
+        const res = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
+          headers: { 'X-Goog-Api-Key': GOOGLE_API_KEY, 'X-Goog-FieldMask': 'location' },
+        })
+        const data = await res.json()
+        const lat = data.location?.latitude
+        const lng = data.location?.longitude
+        if (lat == null || lng == null) { push(`${place.name} — no location in response`, 'skip'); continue }
+
+        const { error: updateErr } = await supabase
+          .from('places')
+          .update({ latitude: lat, longitude: lng })
+          .eq('id', place.id)
+        if (updateErr) throw updateErr
+
+        push(`${place.name} — (${lat.toFixed(5)}, ${lng.toFixed(5)}) ✓`, 'ok')
+      } catch (err: any) {
+        push(`${place.name} — ${err.message}`, 'err')
+      }
+    }
+    push('Coordinates backfill done.')
+  }
+
+  // ── 4. Compress existing review photos ──────────────────────────────────
   async function runReviewPhotoCompression() {
     push('— Fetching review photos in Supabase storage…')
     const { data: photos, error } = await supabase
@@ -159,6 +198,7 @@ export function AdminBackfillPage() {
     setDone(false)
     setLog([])
     try {
+      await runCoordinatesBackfill()
       await runGooglePhotoBackfill()
       await runCompressionBackfill()
       await runReviewPhotoCompression()
@@ -180,7 +220,9 @@ export function AdminBackfillPage() {
     <div className="min-h-svh bg-[#fafaf8] p-5">
       <h1 className="text-xl font-semibold text-gray-900 mb-1">Admin: Backfill</h1>
       <p className="text-sm text-gray-400 mb-5">
-        Fetches Google photos for places without a cover, and recompresses all existing uploaded photos.
+        1) Geocodes all places that have a Google place_id but no coordinates (for the map).
+        2) Fetches Google photos for places without a cover.
+        3) Recompresses all uploaded photos.
       </p>
 
       <button
